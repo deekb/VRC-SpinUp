@@ -3,7 +3,7 @@ A module with all the helper functions required by our program
 """
 
 
-class PIDMotor:
+class CustomPID:
     """
     Wrap a motor definition in this class to use a custom PID to control its movements ie: my_motor = PIDMotor(Motor(...), kp, kd, t)
     Waring, this class disables all motor functionality except the following functions:[set_velocity, set_stopping, stop, spin, velocity]

@@ -9,7 +9,7 @@ Contact Derek.m.baier@gmail.com for more information
 """
 # <editor-fold desc="Imports and liscense">
 
-from VEX_UTILS import bprint, bclear, cprint, cclear, cubic_normalize, controller_input_to_motor_power, PIDMotor, \
+from VEX_UTILS import bprint, bclear, cprint, cclear, cubic_normalize, controller_input_to_motor_power, CustomPID, \
     move_with_offset, move_towards_heading, turn_to_heading, auton_log, get_optical_color, roll_roller
 
 from vex import *
@@ -38,7 +38,7 @@ class Motors:
     rightFrontMotor = Motor(Ports.PORT12, GearSetting.RATIO_18_1, False)
     rightRearMotor = Motor(Ports.PORT1, GearSetting.RATIO_18_1, False)
     roller = Motor(Ports.PORT19, GearSetting.RATIO_36_1, False)
-    flywheel = PIDMotor(Motor(Ports.PORT10, GearSetting.RATIO_36_1, True), kp=0.4, kd=0.05, t=0.01)
+    flywheel = CustomPID(Motor(Ports.PORT10, GearSetting.RATIO_36_1, True), kp=0.4, kd=0.05, t=0.01)
     intake = Motor(Ports.PORT13, GearSetting.RATIO_36_1, True)
     # Motor groups:
     left = MotorGroup(leftFrontMotor, leftRearMotor)
@@ -95,6 +95,7 @@ class Constants:
     SHOOT_PRELOAD = 29
     ROLL_ROLLER = 30
     BOTH_ROLLERS = 31
+    ROLL_AND_SHOOT = 32
     PI = 3.141592
 
 
@@ -135,11 +136,12 @@ def setup() -> None:
                   ("Blue", Constants.BLUE)]),
         ("Stopping", [("Coast", Constants.COAST),
                       ("Brake", Constants.BRAKE)]),
-        ("Autonomous", [("Shoot", Constants.SHOOT_PRELOAD),
-                        ("Plow disks", Constants.PUSH_IN_DISKS_WITH_PLOW),
-                        ("Roller", Constants.ROLL_ROLLER),
-                        ("Both rollers", Constants.BOTH_ROLLERS),
-                        ("Spit disks", Constants.SPIT_OUT_DISKS_WITH_INTAKE)]),
+        ("Auton", [("Shoot", Constants.SHOOT_PRELOAD),
+                   ("RollShoot", Constants.ROLL_AND_SHOOT),
+                   ("Plow", Constants.PUSH_IN_DISKS_WITH_PLOW),
+                   ("Roller", Constants.ROLL_ROLLER),
+                   ("2Roller", Constants.BOTH_ROLLERS),
+                   ("Spit", Constants.SPIT_OUT_DISKS_WITH_INTAKE)]),
         ("Control Mode", [("Tank", Constants.TANK)])
     )
     setting_index = 0
@@ -217,9 +219,6 @@ def on_autonomous() -> None:
         move_towards_heading(heading=0, speed=20, turn_aggression=1, distance_mm=500)
     elif Globals.AUTONOMOUS_TASK == Constants.SHOOT_PRELOAD:
         auton_log("Autonomous will attempt to shoot a preload into the high goal from the center of the field")
-        auton_log("Reseting inertial sensor to allow correct orientation detection...")
-        Sensors.inertial.set_heading(0, DEGREES)  # Reset the sensor
-        auton_log("Inertial sensor reset complete")
         auton_log("Turning towards the center of field...")
         turn_to_heading(25, 0.5)
         auton_log("Moving towards the center of the field...")
@@ -236,7 +235,7 @@ def on_autonomous() -> None:
         auton_log("Spinup complete, waiting an aditional 3500 MS...")
         wait(3500)
         auton_log("Done")
-        Motors.intake.set_velocity(100, PERCENT)
+        Motors.intake.set_velocity(80, PERCENT)
         auton_log("Firing")
         Motors.intake.spin(FORWARD)
         wait(750)
@@ -275,6 +274,39 @@ def on_autonomous() -> None:
         Motors.allWheels.spin(FORWARD)
         bprint("Backing up")
         roll_roller()
+    elif Globals.AUTONOMOUS_TASK == Constants.ROLL_AND_SHOOT:
+        auton_log("Autonomous will attempt to roll the roller and then shoot a preload into the high goal from the center of the field")
+        roll_roller()
+        auton_log("Turning towards the center of field...")
+        turn_to_heading(25, 0.5)
+        auton_log("Moving towards the center of the field...")
+        turn_to_heading(heading=45, turn_aggression=0.5)
+        move_towards_heading(heading=45, speed=50, turn_aggression=1, distance_mm=1525)
+        auton_log("Aiming at goal...")
+        turn_to_heading(-35, 0.5)
+        auton_log("Starting up flywheel")
+        Motors.flywheel.set_velocity(80, PERCENT)
+        Motors.flywheel.spin(FORWARD)
+        auton_log("Waiting for full speed...")
+        while Motors.flywheel.velocity(PERCENT) < 60:
+            wait(10)
+        auton_log("Spinup complete, waiting an aditional 3500 MS...")
+        wait(3500)
+        auton_log("Done")
+        Motors.intake.set_velocity(80, PERCENT)
+        auton_log("Firing")
+        Motors.intake.spin(FORWARD)
+        wait(750)
+        auton_log("Unsticking disk")
+        Motors.intake.spin(REVERSE)
+        wait(400)
+        auton_log("Firing")
+        Motors.intake.spin(FORWARD)
+        wait(2000)
+        auton_log("Spinning down")
+        Motors.intake.stop()
+        Motors.flywheel.stop()
+    auton_log("Cleaning up...")
     bprint("Cleaning up...")
     Motors.intake.set_velocity(0, PERCENT)
     Motors.intake.stop()
@@ -290,7 +322,8 @@ def on_autonomous() -> None:
         Motors.allWheels.set_stopping(COAST)
     elif Globals.STOPPING_MODE == Constants.HOLD:
         Motors.allWheels.set_stopping(HOLD)
-    bprint("Auton: Exit")
+    auton_log("Autonomous: Clean Exit")
+    bprint("Autonomous: Clean Exit")
     auton_log("-----------Autonomous Complete------------")
     if Globals.AUTONOMOUS_LOG:
         Globals.AUTONOMOUS_LOG.close()
