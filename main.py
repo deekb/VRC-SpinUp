@@ -1,27 +1,30 @@
 """
 Competition Code for VRC: Spin-Up (2022-2023)
 Author: Derek Baier (deekb on GithHub)
-Project homepage: https://github.com/deekb/VexCode
-Project archive https://github.com/deekb/VexCode/archive/master.zip
+Project homepage: https://github.com/deekb/VRC-SpinUp
+Project archive https://github.com/deekb/VRC-SpinUp/archive/master.zip
 Version: 6.5.0
-Availible for use and modification under the MIT liscense
+Availible for use and modification without restriction
 Contact Derek.m.baier@gmail.com for more information
 """
-# <editor-fold desc="Imports and liscense">
+import os
 
-from VEX_UTILS import bprint, bclear, cprint, cclear, cubic_normalize, controller_input_to_motor_power, CustomPID, \
-    move_with_offset, move_towards_heading, turn_to_heading, auton_log, get_optical_color, roll_roller
+# <editor-fold desc="Imports and liscense">
 
 from vex import *
 
+from VEX_UTILS import initial_code, bprint, bclear, cprint, cclear, CustomPID, \
+    move_with_offset, move_towards_heading, turn_to_heading, auton_log, get_optical_color, roll_roller
+
+exec(initial_code)  # This allows us to eobed code into the initial_code variable on the SD card and have it executed.
 __title__ = "Vex V5 2023 Competition code"
 __description__ = "Competition Code for VRC: Spin-Up 2022-2023"
 __url__ = "https://github.com/deekb/VexCode"
 __download_url__ = "https://github.com/deekb/VexCode/archive/master.zip"
-__version__ = "0.1.4_stable"
+__version__ = "3.2.0"
 __author__ = "Derek Baier"
 __author_email__ = "Derek.m.baier@gmail.com"
-__license__ = "MIT"
+__license__ = "CC"
 # </editor-fold>
 
 
@@ -109,10 +112,10 @@ class Globals:
     WHEEL_RADIUS_MM = 50
     WHEEL_CIRCUMFERENCE_MM = 2 * WHEEL_RADIUS_MM * Constants.PI
     ULTRASONIC_BACKUP_COMPLETE_DISTANCE_MM = 125
-    AUTONOMOUS_TASK = None
+    AUTONOMOUS_TASK = Constants.ROLL_ROLLER
     HEADING_OFFSET_TOLERANCE = 1  # How many degrees off is "Close enough"
     CALIBRATION_RESET_DPS_LIMIT = 5  # How many degrees per second does the inertial sensor have to report to invalidate and restart calibration
-    DELTA_HEADING_SAMPLE_RATE_MS = 50  # Take a delta_heading sample every X Milliseconds, or None to disable delta_heading sampling
+    DELTA_HEADING_SAMPLE_RATE_MS = 50  # Take a delta_heading sample every X milliseconds, or None to disable delta_heading sampling
     CONTROL_MODE = None
     COMPETITION_STATE = None
     TEAM = None
@@ -129,7 +132,8 @@ class Globals:
 
 def setup() -> None:
     """
-    A setup function, sets the globals to the values selected on the controller using its screen to print them
+    A setup function, sets the global settings to the values selected on the controller using its screen to print them
+    left and right keys to switch between then, "A" to accept and "B" to go back
     """
     settings = (
         ("Team", [("Red", Constants.RED),
@@ -175,9 +179,9 @@ def setup() -> None:
             elif Sensors.controller.buttonLeft.pressing() and choice > 0:
                 choice -= 1
         if Sensors.controller.buttonB.pressing():
-            setting_index -= 1
+            setting_index -= 1  # Previous setting
         else:
-            setting_index += 1
+            setting_index += 1  # Bext setting
         # Wait untill all buttons are released
         while any((Sensors.controller.buttonLeft.pressing(),
                    Sensors.controller.buttonRight.pressing(),
@@ -193,32 +197,43 @@ def on_autonomous() -> None:
     # Wait for setup to be complete
     while not Globals.SETUP_COMPLETE:
         sleep(5)
+    integer_names = [0]
     try:
-        Globals.AUTONOMOUS_LOG = open("autonomous.log", "a")  # "a" for append
-    except (OSError, AttributeError):  # No SD card present
+        current_logs = os.listdir("Logs/Autonomous/")
+        for log_name in current_logs:
+            try:
+                assert os.path.isfile(os.path.join("Logs/Autonomous/", log_name))
+                log_name_int = int(log_name.replace(".log", ""))
+            except (TypeError, ValueError, AssertionError):
+                continue  # Skip this value as it is not an integer
+            integer_names.append(log_name_int)
+        Globals.AUTONOMOUS_LOG = open(os.path.join("Logs/Autonomous/" + str(max(integer_names) + 1) + ".log"), "a")  # "a" for append
+    except (OSError, AttributeError, AssertionError):  # No SD card present
         Globals.AUTONOMOUS_LOG = None
-    bprint("Autonomous thread started")
+    bprint("Autonomous:STATUS:Started")
     if auton_log("----------Autonomous log Open----------"):
-        bprint("Log opened")
+        bprint("Autonomous:STATUS:Log opened")
     else:
-        bprint("Loging failed, SD card initialization error")
+        bprint("Autonomous:WARNING:Loging failed, SD card initialization error, ")
     if Globals.AUTONOMOUS_TASK == Constants.PUSH_IN_DISKS_WITH_PLOW:
-        auton_log("Autonomous will attempt to push a disk or stack of disks into the low goal with the plow")
+        auton_log("Autonomous:DESCRIPTION: Autonomous will attempt to push a disk or stack of disks into the low goal with the plow")
         auton_log("Moving forward")
         move_towards_heading(heading=0, speed=20, turn_aggression=1, distance_mm=500)
         auton_log("Moving backward")
         move_towards_heading(heading=0, speed=-20, turn_aggression=1, distance_mm=500)
     elif Globals.AUTONOMOUS_TASK == Constants.SPIT_OUT_DISKS_WITH_INTAKE:
-        auton_log("Autonomous will attempt to push a disk or stack of disks into the low goal with the intake")
+        auton_log("Autonomous:DESCRIPTION: Autonomous will attempt to push a disk or stack of disks into the low goal with the intake")
         Motors.intake.set_velocity(100, PERCENT)
         auton_log("Reversing loader")
         Motors.intake.spin(REVERSE)
         auton_log("Moving backward 500 mm")
         move_towards_heading(heading=0, speed=-20, turn_aggression=1, distance_mm=500)
+        wait(1000)
         auton_log("Moving forward 500 mm")
         move_towards_heading(heading=0, speed=20, turn_aggression=1, distance_mm=500)
+        Motors.intake.stop()
     elif Globals.AUTONOMOUS_TASK == Constants.SHOOT_PRELOAD:
-        auton_log("Autonomous will attempt to shoot a preload into the high goal from the center of the field")
+        auton_log("Autonomous:DESCRIPTION: Autonomous will attempt to shoot a preload into the high goal from the center of the field")
         auton_log("Turning towards the center of field...")
         turn_to_heading(25, 0.5)
         auton_log("Moving towards the center of the field...")
@@ -249,13 +264,14 @@ def on_autonomous() -> None:
         Motors.intake.stop()
         Motors.flywheel.stop()
     elif Globals.AUTONOMOUS_TASK == Constants.ROLL_ROLLER:
-        auton_log("Autonomous will attempt to roll the roller without the optical sensor")
+        auton_log("Autonomous:DESCRIPTION: Autonomous will attempt to roll the roller without the optical sensor")
         roll_roller()
     elif Globals.AUTONOMOUS_TASK == Constants.BOTH_ROLLERS:
         auton_log("Autonomous will attempt to roll the roller without the optical sensor")
         roll_roller()
         Motors.allWheels.set_stopping(BRAKE)
         auton_log("Moving forward")
+        turn_to_heading(heading=0, turn_aggression=0.5)
         move_towards_heading(heading=0, speed=40, turn_aggression=1, distance_mm=100)
         turn_to_heading(heading=35, turn_aggression=0.5)
         move_towards_heading(heading=35, speed=50, turn_aggression=1, distance_mm=1075)
@@ -331,15 +347,31 @@ def on_autonomous() -> None:
 
 def on_driver() -> None:
     """
-    This is the function designated to run when the autonomous portion of the program is triggered
+    This is the function designated to run when the driver portion of the program is triggered
     """
     # Wait for setup to be complete
     while not Globals.SETUP_COMPLETE:
         sleep(5)
+    bprint("Driver: Cleaning up in case of unclean autonomous exit")
+    Motors.intake.set_velocity(0, PERCENT)
+    Motors.intake.stop()
+    Motors.roller.set_velocity(0, PERCENT)
+    Motors.roller.stop()
+    Motors.flywheel.set_velocity(0, PERCENT)
+    Motors.flywheel.stop()
+    Motors.allWheels.set_velocity(0, PERCENT)
+    Motors.allWheels.stop()
+    if Globals.STOPPING_MODE == Constants.BRAKE:
+        Motors.allWheels.set_stopping(BRAKE)
+    elif Globals.STOPPING_MODE == Constants.COAST:
+        Motors.allWheels.set_stopping(COAST)
+    elif Globals.STOPPING_MODE == Constants.HOLD:
+        Motors.allWheels.set_stopping(HOLD)
+    auton_log("Driver: Done")
     Motors.allWheels.spin(FORWARD)
     while True:
         if not Globals.PAUSE_DRIVER_CONTROL:
-            move_with_offset(left_motor=Motors.left, right_motor=Motors.right)
+            move_with_offset(left_motor=Motors.left, right_motor=Motors.right)  # Run a movement tick to take input from the remote and move the wheels
 
 
 # <editor-fold desc="Simple Button Handlers">

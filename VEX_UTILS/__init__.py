@@ -1,23 +1,25 @@
 """
 A module with all the helper functions required by our program
 """
+initial_code = "pass"
 
 
 class CustomPID:
     """
     Wrap a motor definition in this class to use a custom PID to control its movements ie: my_motor = PIDMotor(Motor(...), kp, kd, t)
+    with the code above you are also required to run "Thread(mymotor.PID_loop)" or your motor will not respond to velocity changes
     Waring, this class disables all motor functionality except the following functions:[set_velocity, set_stopping, stop, spin, velocity]
     :param motor_object: The motor to apply the PID to
     :param kp: Kp value for the PID: How quickly to modify the speed if it has not yet reached the desired speed
-    :param kd: Kd value for the PID: Reduces the speed of response and limit overshoot
+    :param kd: Kd value for the PID: Reduces the speed of response and limits overshoot
     :param t: Time between PID updates
     """
 
     def __init__(self, motor_object, kp: float = 0.4, kd: float = 0.05, t: float = 0.01):
         self.motor_object = motor_object
-        self.kp = kp  # adjust these
-        self.kd = kd  # adjust these
-        self.t = t  # amount of time between cycles (seconds)
+        self.kp = kp
+        self.kd = kd
+        self.t = t
         self.e_pr = 0
         self.target_v = 0
         self.v = 0
@@ -57,6 +59,10 @@ class CustomPID:
             self.target_v = velocity
         else:
             raise NotImplementedError("Unit not implemented: \"" + str(unit) + "\"")
+        try:
+            self.d
+        except NameError:
+            raise RuntimeWarning("It looks like you called set_velocity on a PID-enabled motor without running that motor's PID thread this operation will have no effect, see docs for CustomPID: " + self.__doc__)
 
     def set_stopping(self, **kwargs):
         """
@@ -231,8 +237,12 @@ def turn_to_heading(heading, turn_aggression) -> None:
         delta_heading = right_turn_difference
     Motors.allWheels.set_velocity(0, PERCENT)
     Motors.allWheels.spin(FORWARD)
-    delta_heading_samples = []
-    delta_heading_last_sample_time = brain.timer.time()
+    if Globals.DELTA_HEADING_SAMPLE_RATE_MS:
+        delta_heading_samples = []
+        delta_heading_last_sample_time = brain.timer.time()
+    else:
+        delta_heading_samples = None
+        delta_heading_last_sample_time = None
     movement_start_time = brain.timer.time(MSEC)
     while abs(delta_heading) > Globals.HEADING_OFFSET_TOLERANCE:
         if left_turn_difference < right_turn_difference:
@@ -250,7 +260,7 @@ def turn_to_heading(heading, turn_aggression) -> None:
             left_turn_difference = left_turn_difference + 360
         if right_turn_difference < 0:
             right_turn_difference = right_turn_difference + 360
-        if brain.timer.time() - delta_heading_last_sample_time >= Globals.DELTA_HEADING_SAMPLE_RATE_MS:
+        if Globals.DELTA_HEADING_SAMPLE_RATE_MS and brain.timer.time() - delta_heading_last_sample_time >= Globals.DELTA_HEADING_SAMPLE_RATE_MS:
             delta_heading_samples.append(delta_heading)
             delta_heading_last_sample_time = brain.timer.time()
     Motors.allWheels.stop()
@@ -267,7 +277,8 @@ def turn_to_heading(heading, turn_aggression) -> None:
     else:
         delta_heading = right_turn_difference
     auton_log("[turn_to_heading]: Turned to heading " + str(heading) + " with accuracy of " + str(abs(delta_heading)) + " degrees in " + str(brain.timer.time(MSEC) - movement_start_time) + " ms")
-    auton_log("[turn_to_heading]: Memory dump of delta heading samples: " + str(delta_heading_samples))
+    if Globals.DELTA_HEADING_SAMPLE_RATE_MS:
+        auton_log("[turn_to_heading]: Memory dump of delta heading samples: " + str(delta_heading_samples))
 
 
 def move_towards_heading(heading, speed, turn_aggression, distance_mm) -> None:
@@ -275,7 +286,7 @@ def move_towards_heading(heading, speed, turn_aggression, distance_mm) -> None:
     Move towards a heading using dynamic course correction
     :param heading: The absolute heading to move towards
     :param speed:  The base speed to move at
-    :param turn_aggression: The multiplier for delta_heading
+    :param turn_aggression: The coefficient for delta_heading
     :param distance_mm: The distance to move before stopping the movement
     """
     initial_speed = speed
@@ -286,8 +297,24 @@ def move_towards_heading(heading, speed, turn_aggression, distance_mm) -> None:
                                  / 360) * Globals.WHEEL_CIRCUMFERENCE_MM
     distance_traveled = abs((((Motors.left.position(DEGREES) + Motors.right.position(DEGREES)) / 2)
                              / 360) * Globals.WHEEL_CIRCUMFERENCE_MM - initial_distance_traveled)
+    integer_names = [0]
+    delta_heading_sample_file = None
+    try:
+        current_logs = os.listdir("Logs/Autonomous/Delta_Heading_Dumps")
+        for log_name in current_logs:
+            try:
+                assert os.path.isfile(os.path.join("Logs/Autonomous/Delta_Heading_Dumps", log_name))
+                log_name_int = int(log_name.replace(".dhd", ""))
+            except (TypeError, ValueError, AssertionError):
+                continue  # Skip this value as it is not an integer
+            integer_names.append(log_name_int)
+        delta_heading_sample_file = open(os.path.join("Logs/Autonomous/Delta_Heading_Dumps" + str(max(integer_names) + 1) + ".dhd"), "w")
+    except (OSError, AttributeError):  # No SD card present
+        Globals.DELTA_HEADING_SAMPLE_RATE_MS = None
+        delta_heading_last_sample_time = None
+    else:
+        delta_heading_last_sample_time = brain.timer.time()
     delta_heading_samples = []
-    delta_heading_last_sample_time = brain.timer.time()
     movement_start_time = brain.timer.time(MSEC)
     while distance_traveled < distance_mm:
         distance_traveled = abs((((Motors.left.position(DEGREES) + Motors.right.position(DEGREES)) / 2)
@@ -309,13 +336,13 @@ def move_towards_heading(heading, speed, turn_aggression, distance_mm) -> None:
             Motors.right.set_velocity((delta_heading * turn_aggression - speed) * -1, PERCENT)
         else:
             delta_heading = right_turn_difference
-            if abs(delta_heading) > 5:  # if we are too far off course don't move forward, only turn
-                speed = 0
+            if abs(delta_heading) > 10:  # if we are too far off course don't move forward, only turn
+                speed = initial_speed * (1 - (delta_heading / 10))
             else:
                 speed = initial_speed
             Motors.left.set_velocity((delta_heading * turn_aggression - speed) * -1, PERCENT)
             Motors.right.set_velocity(delta_heading * turn_aggression + speed, PERCENT)
-        if brain.timer.time() - delta_heading_last_sample_time >= Globals.DELTA_HEADING_SAMPLE_RATE_MS:
+        if Globals.DELTA_HEADING_SAMPLE_RATE_MS and brain.timer.time() - delta_heading_last_sample_time >= Globals.DELTA_HEADING_SAMPLE_RATE_MS:
             delta_heading_samples.append(delta_heading)
             delta_heading_last_sample_time = brain.timer.time()
     Motors.allWheels.stop()
@@ -323,13 +350,15 @@ def move_towards_heading(heading, speed, turn_aggression, distance_mm) -> None:
     distance_traveled = abs((((Motors.left.position(DEGREES) + Motors.right.position(DEGREES)) / 2)
                              / 360) * Globals.WHEEL_CIRCUMFERENCE_MM - initial_distance_traveled)
     current_heading = Sensors.inertial.heading(DEGREES) % 360
-    auton_log("[turn_to_heading]: Moved towards heading " + str(heading) + " with end accuracy of " + str(abs(current_heading - heading)) + " degrees, average accuracy of " + str(sum(delta_heading_samples) / len(delta_heading_samples)) + " and distance accuracy of " + str(distance_traveled - distance_mm) + " mm in " + str(brain.timer.time(MSEC) - movement_start_time) + "ms")
-    auton_log("[turn_to_heading]: Memory dump of delta heading samples: " + str(delta_heading_samples))
+    auton_log("[move_towards_heading]: Moved towards heading " + str(heading) + " with end accuracy of " + str(abs(current_heading - heading)) + " degrees, average accuracy of " + str(sum(delta_heading_samples) / len(delta_heading_samples)) + " and distance accuracy of " + str(distance_traveled - distance_mm) + " mm in " + str(brain.timer.time(MSEC) - movement_start_time) + "ms")
+    if delta_heading_sample_file:
+        delta_heading_sample_file.write(str(delta_heading_samples))
+        auton_log("[move_towards_heading]: Memory dump of delta heading samples saved to: " + str(os.path.join("Logs/Autonomous/Delta_Heading_Dumps" + str(max(integer_names) + 1) + ".dhd")))
 
 
 def roll_roller():
     """
-    Roll the roller 90 degrees (only works during autonomout)
+    Roll the roller 90 degrees (only works during autonomous)
     """
     Motors.allWheels.set_stopping(COAST)  # Always good while running into things
     Motors.allWheels.set_velocity(-15, PERCENT)
