@@ -248,30 +248,3 @@ class CustomPID:
         Passthrough method to the "Motor" class
         """
         return self.motor_object.velocity(*args)
-
-
-class ToggleMotor:
-    """
-    Wrap a motor in this class to allow switching it between several speeds
-    """
-
-    def __init__(self, motor, speeds, event):
-        self.motor_object = motor
-        self.states = list(speeds)
-        self.current_state = 0
-        self.button = event
-
-    def next_state(self):
-        """
-        Move the motor to the next state in the list
-        """
-        self.current_state += 1
-        if self.current_state >= len(self.states):
-            self.current_state = 0
-        self.motor_object.set_velocity(self.states[self.current_state])
-
-    def setup_handler(self):
-        """
-        Bind the passed button to our "next_state" callback
-        """
-        self.button(self.next_state)

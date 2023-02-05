@@ -291,8 +291,6 @@ def on_autonomous() -> None:
     Motors.allWheels.stop()
     Motors.allWheels.set_stopping(Globals.STOPPING_MODE)
     bprint("Auton: Exit")
-    if Globals.AUTONOMOUS_LOG:
-        Globals.AUTONOMOUS_LOG.close()
 
 
 def on_driver() -> None:
@@ -311,11 +309,11 @@ def on_driver() -> None:
 
 # <editor-fold desc="Simple Button Handlers">
 
-ToggleMotor(motor=Motors.flywheel, speeds=[0, 65], event=Sensors.controller.buttonA.pressed)
-"""def start_stop_flywheel() -> None:
-    \"\"\"
+
+def start_stop_flywheel() -> None:
+    """
     A custom controller binding for starting and stopping the flywheel
-    \"\"\"
+    """
     if not Globals.SETUP_COMPLETE:
         return
     Globals.FLYWHEEL_ACTIVE = not Globals.FLYWHEEL_ACTIVE
@@ -323,13 +321,13 @@ ToggleMotor(motor=Motors.flywheel, speeds=[0, 65], event=Sensors.controller.butt
         Motors.flywheel.set_velocity(65, PERCENT)
         Motors.flywheel.spin(FORWARD)
     else:
-        Motors.flywheel.stop()"""
+        Motors.flywheel.stop()
 
-ToggleMotor(motor=Motors.roller, speeds=[0, 75], event=Sensors.controller.buttonB.pressed)
-"""def start_stop_roller() -> None:
-    \"\"\"
+
+def start_stop_roller() -> None:
+    """
     A custom controller binding for starting and stopping the roller manually
-    \"\"\"
+    """
     if not Globals.SETUP_COMPLETE:
         return
     Globals.ROLLER_ACTIVE = not Globals.ROLLER_ACTIVE
@@ -337,7 +335,7 @@ ToggleMotor(motor=Motors.roller, speeds=[0, 75], event=Sensors.controller.button
         Motors.roller.set_velocity(75, PERCENT)
         Motors.roller.spin(REVERSE)
     else:
-        Motors.roller.stop()"""
+        Motors.roller.stop()
 
 
 def start_loader() -> None:
@@ -404,8 +402,8 @@ def unload() -> None:
     Globals.PAUSE_LOADING_THREAD = False
 
 
-# Sensors.controller.buttonA.pressed(start_stop_flywheel)
-# Sensors.controller.buttonB.pressed(start_loader)
+Sensors.controller.buttonA.pressed(start_stop_flywheel)
+Sensors.controller.buttonB.pressed(start_loader)
 Sensors.controller.buttonX.pressed(unload)
 Sensors.controller.buttonL1.pressed(start_stop_roller)
 Sensors.controller.buttonR1.pressed(reset_loader)
