@@ -85,11 +85,14 @@ class BetterDrivetrain:
         self.wheel_circumference_mm = 2 * wheel_radius_mm * 3.141592
         self.current_heading = 0
 
-    def turn_to_heading(self, heading: float) -> None:
+    def turn_to_heading(self, heading: float, relative: bool = False) -> None:
         """
         Turn to an absolute heading using the inertial sensor
+        :param relative: Whether to turn relative to the last turn or not
         :param heading: The absolute heading to turn to
         """
+        if relative:
+            heading += self.current_heading
         heading %= 360
         current_heading = self.inertial.heading(DEGREES) % 360
         left_turn_difference = (current_heading - heading)
@@ -123,23 +126,31 @@ class BetterDrivetrain:
         self.drivetrain_motors.stop()
         self.current_heading = heading
 
-    def move_towards_heading(self, heading: float, speed: float, distance_mm: float) -> None:
+    def move_towards_heading(self, heading: float, speed: float, distance_mm: float, relative: bool = False) -> None:
         """
         Move towards a heading using dynamic course correction
+        :param relative: Whether to turn relative to the last turn or not
         :param heading: The absolute heading to move towards
         :param speed:  The base speed to move at
         :param distance_mm: The distance to move before stopping the movement
         """
+        if relative:
+            heading += self.current_heading
         heading %= 360
+        initial_speed = speed
         initial_distance_traveled = (((
-                                              self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm
+                                                  self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm
         distance_traveled = abs((((
-                                          self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
+                                              self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
         self.drivetrain_motors.set_velocity(0, PERCENT)
         self.drivetrain_motors.spin(FORWARD)
         while distance_traveled < distance_mm:
             distance_traveled = abs((((
-                                              self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
+                                                  self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
+            if distance_mm - distance_traveled < 20:
+                speed = initial_speed * ((distance_mm - distance_traveled) / 30)
+            else:
+                speed = initial_speed
             current_heading = self.inertial.heading(DEGREES) % 360
             left_turn_difference = (current_heading - heading)
             right_turn_difference = (heading - current_heading)
@@ -157,17 +168,6 @@ class BetterDrivetrain:
                 self.right_side.set_velocity(delta_heading * turn_aggression + speed, PERCENT)
         self.drivetrain_motors.stop()
         self.current_heading = heading
-
-    def move_with_controller(self) -> None:
-        """
-        Move using the controller input
-        """
-        left_speed, right_speed = controller_input_to_motor_power(
-            (self.controller.axis4.position, self.controller.axis3.position),
-            (self.controller.axis1.position, self.controller.axis2.position),
-            linearity=Globals.SPEED_CURVE_LINEARITY)
-        self.left_side.set_velocity((left_speed + left_offset), PERCENT)
-        self.right_side.set_velocity((right_speed + right_offset), PERCENT)
 
 
 class CustomPID:
@@ -248,3 +248,15 @@ class CustomPID:
         Passthrough method to the "Motor" class
         """
         return self.motor_object.velocity(*args)
+
+
+def move_with_controller(linearity) -> None:
+    """
+    Move using the controller input
+    """
+    left_speed, right_speed = controller_input_to_motor_power(
+        (self.controller.axis4.position, self.controller.axis3.position),
+        (self.controller.axis1.position, self.controller.axis2.position),
+        linearity=linearity)
+    self.left_side.set_velocity((left_speed + left_offset), PERCENT)
+    self.right_side.set_velocity((right_speed + right_offset), PERCENT)

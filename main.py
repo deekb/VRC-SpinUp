@@ -10,7 +10,7 @@ Contact Derek.m.baier@gmail.com for more information
 # <editor-fold desc="Imports and liscense">
 from vex import *
 from Constants import Color, AutonomousTask
-from HelperFunctions import BetterDrivetrain, cubic_normalize, controller_input_to_motor_power, move_with_offset, \
+from HelperFunctions import BetterDrivetrain, cubic_normalize, controller_input_to_motor_power, move_with_controller, \
     get_optical_color, CustomPID, ToggleMotor
 
 __title__ = "Vex V5 2023 Competition code"
@@ -304,9 +304,7 @@ def on_driver() -> None:
     Motors.allWheels.spin(FORWARD)
     while True:
         if not Globals.PAUSE_DRIVER_CONTROL:
-            drivetrain.move_with_controller()
-
-
+            move_with_controller(linearity=Globals.SPEED_CURVE_LINEARITY)
 # <editor-fold desc="Simple Button Handlers">
 
 
