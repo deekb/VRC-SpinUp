@@ -3,7 +3,7 @@ Competition Code for VRC: Spin-Up (2022-2023)
 Author: Derek Baier (deekb on GithHub)
 Project homepage: https://github.com/deekb/VexCode
 Project archive: https://github.com/deekb/VexCode/archive/master.zip
-Version: 2.1.8_rc
+Version: 2.2.10_stable
 Liscense: If you are using or modifying this for your own robot there is no need to give credit unless you think it neccesary
 Contact Derek.m.baier@gmail.com for more information
 """
@@ -11,13 +11,13 @@ Contact Derek.m.baier@gmail.com for more information
 from vex import *
 from Constants import Color, AutonomousTask
 from HelperFunctions import BetterDrivetrain, cubic_normalize, controller_input_to_motor_power, move_with_controller, \
-    get_optical_color, CustomPID, ToggleMotor
+    get_optical_color, CustomPID
 
 __title__ = "Vex V5 2023 Competition code"
 __description__ = "Competition Code for VRC: Spin-Up 2022-2023"
 __url__ = "https://github.com/deekb/VexCode"
 __download_url__ = "https://github.com/deekb/VexCode/archive/master.zip"
-__version__ = "2.1.8_rc"
+__version__ = "2.2.10_stable"
 __author__ = "Derek Baier"
 __author_email__ = "Derek.m.baier@gmail.com"
 __license__ = "If you are using or modifying this for your own robot there is no need to give credit unless you think it neccesary"
@@ -55,7 +55,8 @@ class Sensors:
     A class that contains references to all sensors and other input devices attatched to the robot
     """
     inertial = Inertial(Ports.PORT2)
-    controller = Controller(PRIMARY)
+    primaryController = Controller(PRIMARY)
+    secondaryController = Controller(PARTNER)
     optical_roller = Optical(Ports.PORT14)
     optical_disk = Optical(Ports.PORT8)
     ultrasonic = Sonar(brain.three_wire_port.g)
@@ -85,13 +86,16 @@ class Globals:
         ("Team", [("Red", Color.RED),
                   ("Blue", Color.BLUE)]),
         ("Stopping", [("Coast", COAST),
-                      ("Brake", BRAKE)]),
+                      ("Brake", BRAKE),
+                      ("Hold", HOLD)]),
         ("Autonomous", [("Both rollers", AutonomousTask.BOTH_ROLLERS),
                         ("Shoot", AutonomousTask.SHOOT_PRELOAD),
-                        ("Plow disks", AutonomousTask.PUSH_IN_DISKS_WITH_PLOW),
                         ("RollerL", AutonomousTask.LEFT_ROLLER),
                         ("RollerR", AutonomousTask.RIGHT_ROLLER),
-                        ("Spit disks", AutonomousTask.SPIT_OUT_DISKS_WITH_INTAKE)])
+                        ("Plow disks", AutonomousTask.PUSH_IN_DISKS_WITH_PLOW),
+                        ("Spit disks", AutonomousTask.SPIT_OUT_DISKS_WITH_INTAKE),
+                        ("Low goal", AutonomousTask.SCORE_IN_LOW_GOAL),
+                        ("Nothing", AutonomousTask.DO_NOTHING)])
     )
 
 
@@ -118,16 +122,16 @@ def cprint(string) -> None:
     Print a string to the controller screen
     :param string: the string to print to the screen
     """
-    Sensors.controller.screen.print(string)
-    Sensors.controller.screen.next_row()
+    Sensors.primaryController.screen.print(string)
+    Sensors.primaryController.screen.next_row()
 
 
 def cclear() -> None:
     """
     Clears the controller screen
     """
-    Sensors.controller.screen.clear_screen()
-    Sensors.controller.screen.set_cursor(1, 1)
+    Sensors.primaryController.screen.clear_screen()
+    Sensors.primaryController.screen.set_cursor(1, 1)
 
 
 # </editor-fold>
@@ -143,10 +147,10 @@ def setup() -> None:
         setting_name = Globals.SETTINGS[setting_index][0]
         total_values = len(Globals.SETTINGS[setting_index][1])
         # Wait until all buttons are released
-        while any((Sensors.controller.buttonLeft.pressing(),
-                   Sensors.controller.buttonRight.pressing(),
-                   Sensors.controller.buttonA.pressing(),
-                   Sensors.controller.buttonB.pressing())):
+        while any((Sensors.primaryController.buttonLeft.pressing(),
+                   Sensors.primaryController.buttonRight.pressing(),
+                   Sensors.primaryController.buttonA.pressing(),
+                   Sensors.primaryController.buttonB.pressing())):
             wait(5)
         while True:
             value_printable = Globals.SETTINGS[setting_index][1][choice][0]
@@ -160,26 +164,26 @@ def setup() -> None:
             elif setting_index == 2:
                 Globals.AUTONOMOUS_TASK = value
             # Wait until a button is pressed
-            while not any((Sensors.controller.buttonLeft.pressing(),
-                           Sensors.controller.buttonRight.pressing(),
-                           Sensors.controller.buttonA.pressing(),
-                           Sensors.controller.buttonB.pressing())):
+            while not any((Sensors.primaryController.buttonLeft.pressing(),
+                           Sensors.primaryController.buttonRight.pressing(),
+                           Sensors.primaryController.buttonA.pressing(),
+                           Sensors.primaryController.buttonB.pressing())):
                 wait(5)
-            if Sensors.controller.buttonRight.pressing() and choice < total_values - 1:
+            if Sensors.primaryController.buttonRight.pressing() and choice < total_values - 1:
                 choice += 1
-            elif Sensors.controller.buttonLeft.pressing() and choice > 0:
+            elif Sensors.primaryController.buttonLeft.pressing() and choice > 0:
                 choice -= 1
-            elif Sensors.controller.buttonB.pressing():
+            elif Sensors.primaryController.buttonB.pressing():
                 setting_index -= 1
                 break
-            elif Sensors.controller.buttonA.pressing():
+            elif Sensors.primaryController.buttonA.pressing():
                 setting_index += 1
                 break
             # Wait until all buttons are released
-            while any((Sensors.controller.buttonLeft.pressing(),
-                       Sensors.controller.buttonRight.pressing(),
-                       Sensors.controller.buttonA.pressing(),
-                       Sensors.controller.buttonB.pressing())):
+            while any((Sensors.primaryController.buttonLeft.pressing(),
+                       Sensors.primaryController.buttonRight.pressing(),
+                       Sensors.primaryController.buttonA.pressing(),
+                       Sensors.primaryController.buttonB.pressing())):
                 wait(5)
 
 
@@ -207,6 +211,7 @@ def roll_roller(degrees=90):
     wait(50)
     if get_optical_color(Sensors.optical_roller) != Globals.TEAM:
         roll_roller(degrees=10)
+    Motors.allWheels.set_stopping(BRAKE)
 
 
 def on_autonomous() -> None:
@@ -218,16 +223,25 @@ def on_autonomous() -> None:
         return
     global drivetrain
     Motors.roller.set_stopping(HOLD)
+    Motors.allWheels.set_stopping(BRAKE)
+    if Globals.AUTONOMOUS_TASK == AutonomousTask.DO_NOTHING:
+        pass
+    if Globals.AUTONOMOUS_TASK == AutonomousTask.SCORE_IN_LOW_GOAL:
+        pass
     if Globals.AUTONOMOUS_TASK == AutonomousTask.PUSH_IN_DISKS_WITH_PLOW:
         # Autonomous to push a disk or stack of disks into the low goal with the plow
         drivetrain.move_towards_heading(desired_heading=0, speed=20, distance_mm=500)
         drivetrain.move_towards_heading(desired_heading=0, speed=-20, distance_mm=500)
     elif Globals.AUTONOMOUS_TASK == AutonomousTask.SPIT_OUT_DISKS_WITH_INTAKE:
-        # Autonomous to push a disk or stack of disks into the low goal with the intake
+        # Autonomous to spit a disk or mutiple disks into the low goal with the intake
         drivetrain.move_towards_heading(desired_heading=0, speed=-20, distance_mm=500)
         Motors.intake.set_velocity(100, PERCENT)
         Motors.intake.spin(REVERSE)
-        wait(5000)
+        wait(2500)
+        Motors.intake.spin(FORWARD)
+        wait(500)
+        Motors.intake.spin(REVERSE)
+        wait(2500)
         Motors.intake.stop()
         drivetrain.move_towards_heading(desired_heading=0, speed=20, distance_mm=500)
     elif Globals.AUTONOMOUS_TASK == AutonomousTask.SHOOT_PRELOAD:
@@ -263,7 +277,6 @@ def on_autonomous() -> None:
     elif Globals.AUTONOMOUS_TASK == AutonomousTask.BOTH_ROLLERS:
         # Autonomous to roll both rollers without the optical sensor
         roll_roller()
-        Motors.allWheels.set_stopping(BRAKE)
         drivetrain.turn_to_heading(desired_heading=0)
         drivetrain.move_towards_heading(desired_heading=0, speed=40, distance_mm=100)
         drivetrain.turn_to_heading(desired_heading=35)
@@ -320,7 +333,9 @@ def on_driver() -> None:
     Motors.allWheels.spin(FORWARD)
     while True:
         if not Globals.PAUSE_DRIVER_CONTROL:
-            move_with_controller(left_side=Motors.leftDrivetrain, right_side=Motors.rightDrivetrain, controller=Sensors.controller, linearity=Globals.SPEED_CURVE_LINEARITY)
+            move_with_controller(left_side=Motors.leftDrivetrain, right_side=Motors.rightDrivetrain, controller=Sensors.primaryController, linearity=Globals.SPEED_CURVE_LINEARITY)
+
+
 # <editor-fold desc="Simple Button Handlers">
 
 
@@ -350,6 +365,9 @@ def start_stop_roller() -> None:
         Motors.roller.spin(REVERSE)
     else:
         Motors.roller.stop()
+
+
+# </editor-fold>
 
 
 def start_loader() -> None:
@@ -423,7 +441,7 @@ def unload_no_reload() -> None:
         return
     Globals.PAUSE_LOADING_THREAD = True
     Motors.intake.spin(REVERSE)
-    while Sensors.controller.buttonR2.pressing():
+    while Sensors.primaryController.buttonR2.pressing():
         wait(5)
     # Use this and comment out the above loop if you intend for the unload button to reverse for a set amount of time
     Motors.intake.stop()
@@ -432,15 +450,21 @@ def unload_no_reload() -> None:
     Globals.PAUSE_LOADING_THREAD = False
 
 
-Sensors.controller.buttonA.pressed(start_stop_flywheel)
-Sensors.controller.buttonB.pressed(start_loader)
-Sensors.controller.buttonX.pressed(unload)
-Sensors.controller.buttonR2.pressed(unload_no_reload)
-Sensors.controller.buttonL1.pressed(start_stop_roller)
-Sensors.controller.buttonR1.pressed(reset_loader)
+# Primary controller bindings
+Sensors.primaryController.buttonA.pressed(start_stop_flywheel)
+Sensors.primaryController.buttonB.pressed(start_loader)
+Sensors.primaryController.buttonX.pressed(unload)
+Sensors.primaryController.buttonR2.pressed(unload_no_reload)
+Sensors.primaryController.buttonL1.pressed(start_stop_roller)
+Sensors.primaryController.buttonR1.pressed(reset_loader)
 
-
-# </editor-fold>
+# Secondary controller bindings
+Sensors.secondaryController.buttonA.pressed(start_stop_flywheel)
+Sensors.secondaryController.buttonB.pressed(start_loader)
+Sensors.secondaryController.buttonX.pressed(unload)
+Sensors.secondaryController.buttonR2.pressed(unload_no_reload)
+Sensors.secondaryController.buttonL1.pressed(start_stop_roller)
+Sensors.secondaryController.buttonR1.pressed(reset_loader)
 
 
 # <editor-fold desc="Competition State Handlers">
@@ -469,7 +493,7 @@ competition = Competition(driver_handler, autonomous_handler)
 # </editor-fold>
 
 if __name__ == "__main__":
-    if Sensors.controller.buttonX.pressing():
+    if Sensors.primaryController.buttonX.pressing():
         cclear()
         cprint("Skipped setup")
         Globals.TEAM = Color.RED

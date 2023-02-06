@@ -23,3 +23,5 @@ class AutonomousTask:
     RIGHT_ROLLER = 5
     BOTH_ROLLERS = 6
     SKILLS = 7
+    SCORE_IN_LOW_GOAL = 8
+    DO_NOTHING = 9

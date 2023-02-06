@@ -1,6 +1,7 @@
 """
 Helper functions for our program
 """
+from vex import *
 
 
 def cubic_normalize(value: float, linearity: float) -> float:
@@ -76,7 +77,6 @@ class BetterDrivetrain:
         """
         self.inertial = inertial
         self.left_side = left_side
-        self.drivetrain_motors = MotorGroup(left_side, right_side)
         self.right_side = right_side
         self.heading_offset_tolerance = heading_offset_tolerance
         self.turn_aggression = turn_aggression
@@ -105,8 +105,10 @@ class BetterDrivetrain:
             delta_heading = left_turn_difference
         else:
             delta_heading = right_turn_difference
-        self.drivetrain_motors.set_velocity(0, PERCENT)
-        self.drivetrain_motors.spin(FORWARD)
+        self.left_side.set_velocity(0, PERCENT)
+        self.right_side.set_velocity(0, PERCENT)
+        self.left_side.spin(FORWARD)
+        self.right_side.spin(FORWARD)
         while abs(delta_heading) > heading_offset_tolerance:
             if left_turn_difference < right_turn_difference:
                 delta_heading = left_turn_difference
@@ -123,7 +125,8 @@ class BetterDrivetrain:
                 left_turn_difference = left_turn_difference + 360
             if right_turn_difference < 0:
                 right_turn_difference = right_turn_difference + 360
-        self.drivetrain_motors.stop()
+        self.left_side.stop()
+        self.right_side.stop()
         self.current_heading = desired_heading
 
     def move_towards_heading(self, desired_heading: float, speed: float, distance_mm: float,
@@ -259,5 +262,5 @@ def move_with_controller(controller, left_side: MotorGroup, right_side: MotorGro
         (controller.axis4.position, controller.axis3.position),
         (controller.axis1.position, controller.axis2.position),
         linearity=linearity)
-    left_side.set_velocity((left_speed + left_offset), PERCENT)
-    right_side.set_velocity((right_speed + right_offset), PERCENT)
+    left_side.set_velocity(left_speed, PERCENT)
+    right_side.set_velocity(right_speed, PERCENT)
