@@ -2,9 +2,9 @@
 Competition Code for VRC: Spin-Up (2022-2023)
 Author: Derek Baier (deekb on GithHub)
 Project homepage: https://github.com/deekb/VexCode
-Project archive https://github.com/deekb/VexCode/archive/master.zip
-Version: 2.1.6_stable
-Availible for use and modification under the creative commons liscense
+Project archive: https://github.com/deekb/VexCode/archive/master.zip
+Version: 2.1.8_rc
+Liscense: If you are using or modifying this for your own robot there is no need to give credit unless you think it neccesary
 Contact Derek.m.baier@gmail.com for more information
 """
 # <editor-fold desc="Imports and liscense">
@@ -17,10 +17,10 @@ __title__ = "Vex V5 2023 Competition code"
 __description__ = "Competition Code for VRC: Spin-Up 2022-2023"
 __url__ = "https://github.com/deekb/VexCode"
 __download_url__ = "https://github.com/deekb/VexCode/archive/master.zip"
-__version__ = "2.1.6_stable"
+__version__ = "2.1.8_rc"
 __author__ = "Derek Baier"
 __author_email__ = "Derek.m.baier@gmail.com"
-__license__ = "CC"
+__license__ = "If you are using or modifying this for your own robot there is no need to give credit unless you think it neccesary"
 # </editor-fold>
 
 
@@ -86,10 +86,11 @@ class Globals:
                   ("Blue", Color.BLUE)]),
         ("Stopping", [("Coast", COAST),
                       ("Brake", BRAKE)]),
-        ("Autonomous", [("Shoot", AutonomousTask.SHOOT_PRELOAD),
+        ("Autonomous", [("Both rollers", AutonomousTask.BOTH_ROLLERS),
+                        ("Shoot", AutonomousTask.SHOOT_PRELOAD),
                         ("Plow disks", AutonomousTask.PUSH_IN_DISKS_WITH_PLOW),
-                        ("Roller", AutonomousTask.LEFT_ROLLER),
-                        ("Both rollers", AutonomousTask.BOTH_ROLLERS),
+                        ("RollerL", AutonomousTask.LEFT_ROLLER),
+                        ("RollerR", AutonomousTask.RIGHT_ROLLER),
                         ("Spit disks", AutonomousTask.SPIT_OUT_DISKS_WITH_INTAKE)])
     )
 
@@ -219,21 +220,21 @@ def on_autonomous() -> None:
     Motors.roller.set_stopping(HOLD)
     if Globals.AUTONOMOUS_TASK == AutonomousTask.PUSH_IN_DISKS_WITH_PLOW:
         # Autonomous to push a disk or stack of disks into the low goal with the plow
-        drivetrain.move_towards_heading(heading=0, speed=20, distance_mm=500)
-        drivetrain.move_towards_heading(heading=0, speed=-20, distance_mm=500)
+        drivetrain.move_towards_heading(desired_heading=0, speed=20, distance_mm=500)
+        drivetrain.move_towards_heading(desired_heading=0, speed=-20, distance_mm=500)
     elif Globals.AUTONOMOUS_TASK == AutonomousTask.SPIT_OUT_DISKS_WITH_INTAKE:
         # Autonomous to push a disk or stack of disks into the low goal with the intake
+        drivetrain.move_towards_heading(desired_heading=0, speed=-20, distance_mm=500)
         Motors.intake.set_velocity(100, PERCENT)
         Motors.intake.spin(REVERSE)
-        drivetrain.move_towards_heading(heading=0, speed=-20, distance_mm=500)
-        drivetrain.move_towards_heading(heading=0, speed=20, distance_mm=500)
+        wait(5000)
+        Motors.intake.stop()
+        drivetrain.move_towards_heading(desired_heading=0, speed=20, distance_mm=500)
     elif Globals.AUTONOMOUS_TASK == AutonomousTask.SHOOT_PRELOAD:
         # Autonomous to shoot a preload into the high goal from the center of the field
-        Sensors.inertial.set_heading(0, DEGREES)
-        drivetrain.turn_to_heading(heading=25)
-        drivetrain.turn_to_heading(heading=45)
-        drivetrain.move_towards_heading(heading=45, speed=50, distance_mm=1525)
-        drivetrain.turn_to_heading(heading=-35)
+        drivetrain.turn_to_heading(desired_heading=45)
+        drivetrain.move_towards_heading(desired_heading=45, speed=50, distance_mm=1525)
+        drivetrain.turn_to_heading(desired_heading=-35)
         Motors.flywheel.set_velocity(80, PERCENT)
         Motors.flywheel.spin(FORWARD)
         while Motors.flywheel.velocity(PERCENT) < 60:
@@ -249,37 +250,52 @@ def on_autonomous() -> None:
         Motors.intake.stop()
         Motors.flywheel.stop()
     elif Globals.AUTONOMOUS_TASK == AutonomousTask.LEFT_ROLLER:
-        # Autonomous to roll a single roller without the optical sensor
+        # Autonomous to roll the left roller without the optical sensor
+        roll_roller()
+    elif Globals.AUTONOMOUS_TASK == AutonomousTask.RIGHT_ROLLER:
+        # Autonomous to roll the right roller without the optical sensor
+        drivetrain.turn_to_heading(desired_heading=0)
+        drivetrain.move_towards_heading(desired_heading=0, speed=-50, distance_mm=450)
+        drivetrain.turn_to_heading(desired_heading=55)
+        drivetrain.move_towards_heading(desired_heading=55, speed=-50, distance_mm=280)
+        drivetrain.turn_to_heading(desired_heading=90)
         roll_roller()
     elif Globals.AUTONOMOUS_TASK == AutonomousTask.BOTH_ROLLERS:
         # Autonomous to roll both rollers without the optical sensor
         roll_roller()
         Motors.allWheels.set_stopping(BRAKE)
-        drivetrain.turn_to_heading(heading=0)
-        drivetrain.move_towards_heading(heading=0, speed=40, distance_mm=100)
-        drivetrain.turn_to_heading(heading=35)
-        drivetrain.move_towards_heading(heading=35, speed=50, distance_mm=1075)
-        drivetrain.turn_to_heading(heading=45)
-        drivetrain.move_towards_heading(heading=45, speed=70, distance_mm=1700)
-        drivetrain.turn_to_heading(heading=90)
-        drivetrain.move_towards_heading(heading=90, speed=40, distance_mm=140)
-        drivetrain.turn_to_heading(heading=-135)
-        drivetrain.move_towards_heading(heading=-135, speed=-40, distance_mm=500)
-        drivetrain.turn_to_heading(heading=-90)
-        Motors.allWheels.set_stopping(COAST)  # Always good while running into things
-        Motors.allWheels.set_velocity(-20, PERCENT)
-        Motors.allWheels.spin(FORWARD)
+        drivetrain.turn_to_heading(desired_heading=0)
+        drivetrain.move_towards_heading(desired_heading=0, speed=40, distance_mm=100)
+        drivetrain.turn_to_heading(desired_heading=35)
+        drivetrain.move_towards_heading(desired_heading=35, speed=50, distance_mm=1075)
+        drivetrain.turn_to_heading(desired_heading=45)
+        drivetrain.move_towards_heading(desired_heading=45, speed=70, distance_mm=1700)
+        drivetrain.turn_to_heading(desired_heading=90)
+        Motors.intake.set_velocity(50, PERCENT)
+        Motors.flywheel.set_velocity(20, PERCENT)
+        Motors.intake.spin(FORWARD)
+        Motors.flywheel.spin(FORWARD)
+        drivetrain.move_towards_heading(desired_heading=90, speed=40, distance_mm=140)
+        drivetrain.turn_to_heading(desired_heading=-135)
+        drivetrain.move_towards_heading(desired_heading=-135, speed=-40, distance_mm=500)
+        drivetrain.turn_to_heading(desired_heading=-90)
         roll_roller()
+        Motors.intake.stop()
+        Motors.flywheel.stop()
     elif Globals.AUTONOMOUS_TASK == AutonomousTask.SKILLS:
         # Autonomous to roll all four rollers without the optical sensor
         Motors.intake.set_velocity(100, PERCENT)
         Motors.intake.spin(FORWARD)
         Motors.flywheel.set_velocity(25, PERCENT)
         Motors.flywheel.spin(FORWARD)
-        drivetrain.turn_to_heading(heading=0)
+        drivetrain.turn_to_heading(desired_heading=0)
         roll_roller(degrees=180)
-        drivetrain.turn_to_heading(heading=0)
-        drivetrain.move_towards_heading(heading=0, speed=40, distance_mm=700)
+        drivetrain.turn_to_heading(desired_heading=0)
+        drivetrain.move_towards_heading(desired_heading=0, speed=40, distance_mm=650)
+        drivetrain.turn_to_heading(desired_heading=90)
+        drivetrain.move_towards_heading(desired_heading=90, speed=-40, distance_mm=650)
+        roll_roller(degrees=180)
+        drivetrain.turn_to_heading(desired_heading=90)
     bprint("Cleaning up...")
     Motors.intake.set_velocity(0, PERCENT)
     Motors.intake.stop()
@@ -304,7 +320,7 @@ def on_driver() -> None:
     Motors.allWheels.spin(FORWARD)
     while True:
         if not Globals.PAUSE_DRIVER_CONTROL:
-            move_with_controller(linearity=Globals.SPEED_CURVE_LINEARITY)
+            move_with_controller(left_side=Motors.leftDrivetrain, right_side=Motors.rightDrivetrain, controller=Sensors.controller, linearity=Globals.SPEED_CURVE_LINEARITY)
 # <editor-fold desc="Simple Button Handlers">
 
 
@@ -340,9 +356,8 @@ def start_loader() -> None:
     """
     A custom controller binding for starting the smart loader
     """
-    if not Globals.SETUP_COMPLETE:
-        return
-    Globals.INTAKE_ACTIVE = True
+    if Globals.SETUP_COMPLETE:
+        Globals.INTAKE_ACTIVE = True
 
 
 def loading_handler():
@@ -359,7 +374,7 @@ def loading_handler():
         if not Globals.PAUSE_LOADING_THREAD:
             if Globals.INTAKE_ACTIVE and not Globals.DISK_READY:
                 Motors.intake.set_velocity(80, PERCENT)
-                while get_optical_color(Sensors.optical_disk) != Color.YELLOW and Color.INTAKE_ACTIVE:
+                while get_optical_color(Sensors.optical_disk) != Color.YELLOW and Globals.INTAKE_ACTIVE:
                     Motors.intake.spin(FORWARD)
                 if Globals.INTAKE_ACTIVE:
                     Motors.intake.spin_for(REVERSE, 30, DEGREES)
@@ -400,9 +415,27 @@ def unload() -> None:
     Globals.PAUSE_LOADING_THREAD = False
 
 
+def unload_no_reload() -> None:
+    """
+    A custom controller binding for quickly reversing the roller and then reloading the current disk
+    """
+    if not Globals.SETUP_COMPLETE:
+        return
+    Globals.PAUSE_LOADING_THREAD = True
+    Motors.intake.spin(REVERSE)
+    while Sensors.controller.buttonR2.pressing():
+        wait(5)
+    # Use this and comment out the above loop if you intend for the unload button to reverse for a set amount of time
+    Motors.intake.stop()
+    Globals.DISK_READY = False
+    Globals.INTAKE_ACTIVE = False
+    Globals.PAUSE_LOADING_THREAD = False
+
+
 Sensors.controller.buttonA.pressed(start_stop_flywheel)
 Sensors.controller.buttonB.pressed(start_loader)
 Sensors.controller.buttonX.pressed(unload)
+Sensors.controller.buttonR2.pressed(unload_no_reload)
 Sensors.controller.buttonL1.pressed(start_stop_roller)
 Sensors.controller.buttonR1.pressed(reset_loader)
 
