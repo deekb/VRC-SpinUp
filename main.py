@@ -245,17 +245,23 @@ def on_autonomous() -> None:
     if Globals.AUTONOMOUS_TASK == AutonomousTask.DO_NOTHING:
         # Autonomous to well... do nothing!
         bprint("Autonomous:STATUS: Doing nothing")
+    if Globals.AUTONOMOUS_TASK == AutonomousTask.DRIVETRAIN_TEST:
+        # Test the drivetrain
+        bprint("Autonomous:STATUS: Tesing drivetrain")
     if Globals.AUTONOMOUS_TASK == AutonomousTask.SCORE_IN_LOW_GOAL:
         bprint("Autonomous:STATUS: Running score in low goal")
         raise NotImplementedError("Scoring in low goal not implemented")
     if Globals.AUTONOMOUS_TASK == AutonomousTask.PUSH_IN_DISKS_WITH_PLOW:
         bprint("Autonomous:STATUS: Running plow in disks")
         # Autonomous to push a disk or stack of disks into the low goal with the plow
+        drivetrain.turn_to_heading(desired_heading=0)
         drivetrain.move_towards_heading(desired_heading=0, speed=20, distance_mm=500)
+        drivetrain.turn_to_heading(desired_heading=0)
         drivetrain.move_towards_heading(desired_heading=0, speed=-20, distance_mm=500)
     elif Globals.AUTONOMOUS_TASK == AutonomousTask.SPIT_OUT_DISKS_WITH_INTAKE:
         bprint("Autonomous:STATUS: Running Spit out disks")
         # Autonomous to spit a disk or mutiple disks into the low goal with the intake after backing up
+        drivetrain.turn_to_heading(desired_heading=0)
         drivetrain.move_towards_heading(desired_heading=0, speed=-20, distance_mm=500)
         Motors.intake.set_velocity(100, PERCENT)
         Motors.intake.spin(REVERSE)
@@ -264,6 +270,7 @@ def on_autonomous() -> None:
         wait(500)
         Motors.intake.spin(REVERSE)
         wait(2500)
+        drivetrain.turn_to_heading(desired_heading=0)
         drivetrain.move_towards_heading(desired_heading=0, speed=20, distance_mm=500)
         Motors.intake.stop()
     elif Globals.AUTONOMOUS_TASK == AutonomousTask.SHOOT_PRELOAD_LEFT:

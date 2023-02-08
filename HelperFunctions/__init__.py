@@ -110,22 +110,22 @@ class BetterDrivetrain:
         self.right_side.set_velocity(0, PERCENT)
         self.left_side.spin(FORWARD)
         self.right_side.spin(FORWARD)
-        while abs(delta_heading) > heading_offset_tolerance:
+        while abs(delta_heading) > self.heading_offset_tolerance:
             if left_turn_difference < right_turn_difference:
                 delta_heading = left_turn_difference
-                self.left_side.set_velocity(delta_heading * turn_aggression + 5, PERCENT)
-                self.right_side.set_velocity((delta_heading * turn_aggression + 5) * -1, PERCENT)
+                self.left_side.set_velocity(delta_heading * self.turn_aggression + 5, PERCENT)
+                self.right_side.set_velocity((delta_heading * self.turn_aggression + 5) * -1, PERCENT)
             else:
                 delta_heading = right_turn_difference
-                self.left_side.set_velocity((delta_heading * turn_aggression + 5) * -1, PERCENT)
-                self.right_side.set_velocity(delta_heading * turn_aggression + 5, PERCENT)
+                self.left_side.set_velocity((delta_heading * self.turn_aggression + 5) * -1, PERCENT)
+                self.right_side.set_velocity(delta_heading * self.turn_aggression + 5, PERCENT)
             current_heading = self.inertial.heading(DEGREES) % 360
-            left_turn_difference = (current_heading - desired_heading)
-            right_turn_difference = (desired_heading - current_heading)
+            left_turn_difference = current_heading - desired_heading
+            right_turn_difference = desired_heading - current_heading
             if left_turn_difference < 0:
-                left_turn_difference = left_turn_difference + 360
+                left_turn_difference += 360
             if right_turn_difference < 0:
-                right_turn_difference = right_turn_difference + 360
+                right_turn_difference += 360
         self.left_side.stop()
         self.right_side.stop()
         self.current_heading = desired_heading
@@ -190,12 +190,12 @@ class CustomPID:
         self.kp = kp
         self.kd = kd
         self.t = t
-        self.e_pr = 0
-        self.target_v = 0
         self.v = 0
         self.e = 0
         self.d = 0
         self.o = 0
+        self.e_pr = 0
+        self.target_v = 0
 
     def PID_update(self) -> None:
         """
