@@ -4,7 +4,7 @@ Team: 3773P (Bowbots Phosphorus)
 Author: Derek Baier (deekb on GithHub)
 Project homepage: https://github.com/deekb/VRC-SpinUp
 Project archive: https://github.com/deekb/VRC-SpinUp/archive/master.zip
-Version: 2.2.10_stable
+Version: 2.4.18_stable
 Liscense: If you are using or modifying this for your own robot there is no need to give credit unless you think it neccesary
 Contact Derek.m.baier@gmail.com for more information
 """
@@ -19,7 +19,7 @@ __description__ = "Competition Code for VRC: Spin-Up 2022-2023"
 __team__ = "3773P (Bowbots Phosphorus)"
 __url__ = "https://github.com/deekb/VRC-SpinUp"
 __download_url__ = "https://github.com/deekb/VRC-SpinUp/archive/master.zip"
-__version__ = "2.2.10_stable"
+__version__ = "2.4.18_stable"
 __author__ = "Derek Baier"
 __author_email__ = "Derek.m.baier@gmail.com"
 __license__ = "If you are using or modifying this for your own robot there is no need to give credit unless you think it neccesary"
@@ -82,7 +82,7 @@ class Globals:
     AUTONOMOUS_TASK = AutonomousTask.ROLLER_LEFT
     HEADING_OFFSET_TOLERANCE = 1  # How many degrees off is "Close enough"
     CALIBRATION_RESET_DPS_LIMIT = 5  # How many degrees per second does the inertial sensor have to report to invalidate and restart calibration
-    EXPANSION_REMINDER_TIME_MSEC = 105000
+    EXPANSION_REMINDER_TIME_MSEC = 95000  # The amount of time after driver control starts that the program should vibrate the secondary controller
     TEAM = None
     SETUP_COMPLETE = False
     PAUSE_DRIVER_CONTROL = False
@@ -222,8 +222,6 @@ def roll_roller(degrees=90):
     Motors.allWheels.spin(FORWARD)
     while Sensors.ultrasonic.distance(MM) > Globals.ULTRASONIC_BACKUP_COMPLETE_DISTANCE_MM:
         wait(5)
-    Motors.leftRearMotor.stop()
-    Motors.rightRearMotor.stop()
     Motors.leftFrontMotor.set_velocity(-3, PERCENT)
     Motors.rightFrontMotor.set_velocity(-3, PERCENT)
     Motors.roller.spin_for(REVERSE, degrees * (20 / 9), DEGREES)
@@ -246,7 +244,7 @@ def on_autonomous() -> None:
     bprint("Autonomous: START")
     if Globals.AUTONOMOUS_TASK == AutonomousTask.DO_NOTHING:
         # Autonomous to well... do nothing!
-        bprint("Doing nothing")
+        bprint("Autonomous:STATUS: Doing nothing")
     if Globals.AUTONOMOUS_TASK == AutonomousTask.SCORE_IN_LOW_GOAL:
         bprint("Autonomous:STATUS: Running score in low goal")
         raise NotImplementedError("Scoring in low goal not implemented")

@@ -1,6 +1,7 @@
 """
 All custom constants needed for our programs
 """
+from vex import *
 
 
 class Color:
