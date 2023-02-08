@@ -2,6 +2,7 @@
 Helper functions for our program
 """
 from vex import *
+from Constants import Color, AutonomousTask
 
 
 def cubic_normalize(value: float, linearity: float) -> float:
@@ -63,8 +64,8 @@ class BetterDrivetrain:
     """
 
     def __init__(self, inertial: Inertial, left_side: MotorGroup, right_side: MotorGroup,
-                 heading_offset_tolerance: float, turn_aggression: float, correction_aggression: float,
-                 wheel_radius_mm: float) -> None:
+                 heading_offset_tolerance: float, wheel_radius_mm: float, turn_aggression: float = 0.5,
+                 correction_aggression: float = 0.5, ) -> None:
         """
         Initialize a new drivetrain with the specified properties
         :param inertial: The inertial sensor to use for the drivetrain
@@ -72,7 +73,7 @@ class BetterDrivetrain:
         :param right_side: The motor/motor group corresponding to the right side of the robot
         :param heading_offset_tolerance: The delta heading that is acceptable or close enough
         :param turn_aggression: How aggressive to be while turning
-        :param correction_aggression: How aggressive to be while moving
+        :param correction_aggression: How aggressive to be while correcting movements
         :param wheel_radius_mm: The radis of the wheels
         """
         self.inertial = inertial
@@ -89,7 +90,7 @@ class BetterDrivetrain:
         """
         Turn to an absolute heading using the inertial sensor
         :param relative: Whether to turn relative to the last turn or not
-        :param desired_heading: The absolute heading to turn to
+        :param desired_heading: The heading to turn to
         """
         if relative:
             desired_heading += self.current_heading
@@ -143,14 +144,14 @@ class BetterDrivetrain:
         desired_heading %= 360
         initial_speed = speed
         initial_distance_traveled = (((
-                                              self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm
+                                                  self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm
         distance_traveled = abs((((
-                                          self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
+                                              self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
         self.drivetrain_motors.set_velocity(0, PERCENT)
         self.drivetrain_motors.spin(FORWARD)
         while distance_traveled < distance_mm:
             distance_traveled = abs((((
-                                              self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
+                                                  self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
             if distance_mm - distance_traveled < 20:
                 speed = initial_speed * ((distance_mm - distance_traveled) / 30)
             else:
@@ -180,15 +181,15 @@ class CustomPID:
     Waring, this class disables all motor functionality except the following functions:[set_velocity, set_stopping, stop, spin, velocity]
     :param motor_object: The motor to apply the PID to
     :param kp: Kp value for the PID: How quickly to modify the speed if it has not yet reached the desired speed
-    :param kd: Kd value for the PID: Reduces the speed of response and limit overshoot
+    :param kd: Kd value for the PID: Higher values reduce the speed of response and limit overshoot
     :param t: Time between PID updates
     """
 
     def __init__(self, motor_object, kp: float = 0.4, kd: float = 0.05, t: float = 0.01) -> None:
         self.motor_object = motor_object
-        self.kp = kp  # adjust these
-        self.kd = kd  # adjust these
-        self.t = t  # amount of time between cycles (seconds)
+        self.kp = kp
+        self.kd = kd
+        self.t = t
         self.e_pr = 0
         self.target_v = 0
         self.v = 0
@@ -227,7 +228,7 @@ class CustomPID:
         if unit == PERCENT:
             self.target_v = velocity
         else:
-            raise NotImplementedError("Unit not implemented: \"" + str(unit) + "\"")
+            raise NotImplementedError("Unit not implemented: \"" + str(unit) + "\", pease use \"PERCENT\"")
 
     def set_stopping(self, **kwargs) -> None:
         """

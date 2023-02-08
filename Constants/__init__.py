@@ -1,5 +1,5 @@
 """
-All constants for our programs
+All custom constants needed for our programs
 """
 
 
@@ -16,12 +16,13 @@ class AutonomousTask:
     """
     All the possible autonomous tasks
     """
-    PUSH_IN_DISKS_WITH_PLOW = 1
-    SPIT_OUT_DISKS_WITH_INTAKE = 2
-    SHOOT_PRELOAD = 3
-    LEFT_ROLLER = 4
-    RIGHT_ROLLER = 5
-    BOTH_ROLLERS = 6
-    SKILLS = 7
-    SCORE_IN_LOW_GOAL = 8
-    DO_NOTHING = 9
+    SCORE_IN_LOW_GOAL = 1
+    PUSH_IN_DISKS_WITH_PLOW = 2
+    SPIT_OUT_DISKS_WITH_INTAKE = 3
+    SHOOT_PRELOAD_LEFT = 4
+    SHOOT_PRELOAD_RIGHT = 5
+    ROLLER_LEFT = 6
+    ROLLER_RIGHT = 7
+    ROLLER_BOTH = 8
+    SKILLS = 9
+    DO_NOTHING = 10

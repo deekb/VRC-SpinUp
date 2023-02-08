@@ -1,8 +1,9 @@
 """
 Competition Code for VRC: Spin-Up (2022-2023)
+Team: 3773P (Bowbots Phosphorus)
 Author: Derek Baier (deekb on GithHub)
-Project homepage: https://github.com/deekb/VexCode
-Project archive: https://github.com/deekb/VexCode/archive/master.zip
+Project homepage: https://github.com/deekb/VRC-SpinUp
+Project archive: https://github.com/deekb/VRC-SpinUp/archive/master.zip
 Version: 2.2.10_stable
 Liscense: If you are using or modifying this for your own robot there is no need to give credit unless you think it neccesary
 Contact Derek.m.baier@gmail.com for more information
@@ -15,8 +16,9 @@ from HelperFunctions import BetterDrivetrain, cubic_normalize, controller_input_
 
 __title__ = "Vex V5 2023 Competition code"
 __description__ = "Competition Code for VRC: Spin-Up 2022-2023"
-__url__ = "https://github.com/deekb/VexCode"
-__download_url__ = "https://github.com/deekb/VexCode/archive/master.zip"
+__team__ = "3773P (Bowbots Phosphorus)"
+__url__ = "https://github.com/deekb/VRC-SpinUp"
+__download_url__ = "https://github.com/deekb/VRC-SpinUp/archive/master.zip"
 __version__ = "2.2.10_stable"
 __author__ = "Derek Baier"
 __author_email__ = "Derek.m.baier@gmail.com"
@@ -41,6 +43,7 @@ class Motors:
     roller = Motor(Ports.PORT19, GearSetting.RATIO_36_1, False)
     flywheel = CustomPID(Motor(Ports.PORT10, GearSetting.RATIO_36_1, True), kp=0.4, kd=0.05, t=0.01)
     intake = Motor(Ports.PORT13, GearSetting.RATIO_36_1, True)
+    expansion = Motor(Prrts.PORT, GearSetting.RATIO_36_1, False)
     # Motor groups:
     leftDrivetrain = MotorGroup(leftFrontMotor, leftRearMotor)
     rightDrivetrain = MotorGroup(rightFrontMotor, rightRearMotor)
@@ -55,11 +58,17 @@ class Sensors:
     A class that contains references to all sensors and other input devices attatched to the robot
     """
     inertial = Inertial(Ports.PORT2)
-    primaryController = Controller(PRIMARY)
-    secondaryController = Controller(PARTNER)
     optical_roller = Optical(Ports.PORT14)
     optical_disk = Optical(Ports.PORT8)
     ultrasonic = Sonar(brain.three_wire_port.g)
+
+
+class Controllers:
+    """
+    Primary and secondary controllers
+    """
+    primary = Controller(PRIMARY)
+    secondary = Controller(PARTNER)
 
 
 class Globals:
@@ -70,9 +79,10 @@ class Globals:
     # it should be set between 0.00 and 3.00 for optimal performance
     SPEED_CURVE_LINEARITY = 0.35
     ULTRASONIC_BACKUP_COMPLETE_DISTANCE_MM = 125
-    AUTONOMOUS_TASK = AutonomousTask.LEFT_ROLLER
+    AUTONOMOUS_TASK = AutonomousTask.ROLLER_LEFT
     HEADING_OFFSET_TOLERANCE = 1  # How many degrees off is "Close enough"
     CALIBRATION_RESET_DPS_LIMIT = 5  # How many degrees per second does the inertial sensor have to report to invalidate and restart calibration
+    EXPANSION_REMINDER_TIME_MSEC = 105000
     TEAM = None
     SETUP_COMPLETE = False
     PAUSE_DRIVER_CONTROL = False
@@ -82,16 +92,18 @@ class Globals:
     INTAKE_ACTIVE = False
     DISK_READY = False
     PAUSE_LOADING_THREAD = False
+    DRIVER_START_TIME_MSEC = None
     SETTINGS = (
         ("Team", [("Red", Color.RED),
                   ("Blue", Color.BLUE)]),
         ("Stopping", [("Coast", COAST),
                       ("Brake", BRAKE),
                       ("Hold", HOLD)]),
-        ("Autonomous", [("Both rollers", AutonomousTask.BOTH_ROLLERS),
-                        ("Shoot", AutonomousTask.SHOOT_PRELOAD),
-                        ("RollerL", AutonomousTask.LEFT_ROLLER),
-                        ("RollerR", AutonomousTask.RIGHT_ROLLER),
+        ("Autonomous", [("Both rollers", AutonomousTask.ROLLER_BOTH),
+                        ("ShootL", AutonomousTask.SHOOT_PRELOAD_LEFT),
+                        ("ShootR", AutonomousTask.SHOOT_PRELOAD_RIGHT),
+                        ("RollerL", AutonomousTask.ROLLER_LEFT),
+                        ("RollerR", AutonomousTask.ROLLER_RIGHT),
                         ("Plow disks", AutonomousTask.PUSH_IN_DISKS_WITH_PLOW),
                         ("Spit disks", AutonomousTask.SPIT_OUT_DISKS_WITH_INTAKE),
                         ("Low goal", AutonomousTask.SCORE_IN_LOW_GOAL),
@@ -117,24 +129,32 @@ def bclear() -> None:
     brain.screen.set_cursor(1, 1)
 
 
-def cprint(string) -> None:
+def cprint(string, controller: Controller = Controllers.primary) -> None:
     """
     Print a string to the controller screen
+    :param controller: The controller to print to
     :param string: the string to print to the screen
     """
-    Sensors.primaryController.screen.print(string)
-    Sensors.primaryController.screen.next_row()
+    controller.screen.print(string)
+    controller.screen.next_row()
 
 
-def cclear() -> None:
+def cclear(controller: Controller = Controllers.primary) -> None:
     """
+    :param controller: The controller to clear
     Clears the controller screen
     """
-    Sensors.primaryController.screen.clear_screen()
-    Sensors.primaryController.screen.set_cursor(1, 1)
+    controller.screen.clear_screen()
+    controller.screen.set_cursor(1, 1)
 
 
 # </editor-fold>
+
+
+bprint("Program: " + __title__)
+bprint("Version: " + __version__)
+bprint("Author: " + __author__)
+bprint("Team: " + __team__)
 
 
 def setup() -> None:
@@ -147,10 +167,10 @@ def setup() -> None:
         setting_name = Globals.SETTINGS[setting_index][0]
         total_values = len(Globals.SETTINGS[setting_index][1])
         # Wait until all buttons are released
-        while any((Sensors.primaryController.buttonLeft.pressing(),
-                   Sensors.primaryController.buttonRight.pressing(),
-                   Sensors.primaryController.buttonA.pressing(),
-                   Sensors.primaryController.buttonB.pressing())):
+        while any((Controllers.primary.buttonLeft.pressing(),
+                   Controllers.primary.buttonRight.pressing(),
+                   Controllers.primary.buttonA.pressing(),
+                   Controllers.primary.buttonB.pressing())):
             wait(5)
         while True:
             value_printable = Globals.SETTINGS[setting_index][1][choice][0]
@@ -164,26 +184,26 @@ def setup() -> None:
             elif setting_index == 2:
                 Globals.AUTONOMOUS_TASK = value
             # Wait until a button is pressed
-            while not any((Sensors.primaryController.buttonLeft.pressing(),
-                           Sensors.primaryController.buttonRight.pressing(),
-                           Sensors.primaryController.buttonA.pressing(),
-                           Sensors.primaryController.buttonB.pressing())):
+            while not any((Controllers.primary.buttonLeft.pressing(),
+                           Controllers.primary.buttonRight.pressing(),
+                           Controllers.primary.buttonA.pressing(),
+                           Controllers.primary.buttonB.pressing())):
                 wait(5)
-            if Sensors.primaryController.buttonRight.pressing() and choice < total_values - 1:
+            if Controllers.primary.buttonRight.pressing() and choice < total_values - 1:
                 choice += 1
-            elif Sensors.primaryController.buttonLeft.pressing() and choice > 0:
+            elif Controllers.primary.buttonLeft.pressing() and choice > 0:
                 choice -= 1
-            elif Sensors.primaryController.buttonB.pressing():
+            elif Controllers.primary.buttonB.pressing():
                 setting_index -= 1
                 break
-            elif Sensors.primaryController.buttonA.pressing():
+            elif Controllers.primary.buttonA.pressing():
                 setting_index += 1
                 break
             # Wait until all buttons are released
-            while any((Sensors.primaryController.buttonLeft.pressing(),
-                       Sensors.primaryController.buttonRight.pressing(),
-                       Sensors.primaryController.buttonA.pressing(),
-                       Sensors.primaryController.buttonB.pressing())):
+            while any((Controllers.primary.buttonLeft.pressing(),
+                       Controllers.primary.buttonRight.pressing(),
+                       Controllers.primary.buttonA.pressing(),
+                       Controllers.primary.buttonB.pressing())):
                 wait(5)
 
 
@@ -208,9 +228,6 @@ def roll_roller(degrees=90):
     Motors.rightFrontMotor.set_velocity(-3, PERCENT)
     Motors.roller.spin_for(REVERSE, degrees * (20 / 9), DEGREES)
     Motors.allWheels.stop()
-    wait(50)
-    if get_optical_color(Sensors.optical_roller) != Globals.TEAM:
-        roll_roller(degrees=10)
     Motors.allWheels.set_stopping(BRAKE)
 
 
@@ -222,18 +239,25 @@ def on_autonomous() -> None:
     if not Globals.SETUP_COMPLETE:
         return
     global drivetrain
+    brain.screen.set_font(FontType.MONO12)
     Motors.roller.set_stopping(HOLD)
     Motors.allWheels.set_stopping(BRAKE)
+    Sensors.inertial.set_heading(0, DEGREES)
+    bprint("Autonomous: START")
     if Globals.AUTONOMOUS_TASK == AutonomousTask.DO_NOTHING:
-        pass
+        # Autonomous to well... do nothing!
+        bprint("Doing nothing")
     if Globals.AUTONOMOUS_TASK == AutonomousTask.SCORE_IN_LOW_GOAL:
-        pass
+        bprint("Autonomous:STATUS: Running score in low goal")
+        raise NotImplementedError("Scoring in low goal not implemented")
     if Globals.AUTONOMOUS_TASK == AutonomousTask.PUSH_IN_DISKS_WITH_PLOW:
+        bprint("Autonomous:STATUS: Running plow in disks")
         # Autonomous to push a disk or stack of disks into the low goal with the plow
         drivetrain.move_towards_heading(desired_heading=0, speed=20, distance_mm=500)
         drivetrain.move_towards_heading(desired_heading=0, speed=-20, distance_mm=500)
     elif Globals.AUTONOMOUS_TASK == AutonomousTask.SPIT_OUT_DISKS_WITH_INTAKE:
-        # Autonomous to spit a disk or mutiple disks into the low goal with the intake
+        bprint("Autonomous:STATUS: Running Spit out disks")
+        # Autonomous to spit a disk or mutiple disks into the low goal with the intake after backing up
         drivetrain.move_towards_heading(desired_heading=0, speed=-20, distance_mm=500)
         Motors.intake.set_velocity(100, PERCENT)
         Motors.intake.spin(REVERSE)
@@ -242,10 +266,11 @@ def on_autonomous() -> None:
         wait(500)
         Motors.intake.spin(REVERSE)
         wait(2500)
-        Motors.intake.stop()
         drivetrain.move_towards_heading(desired_heading=0, speed=20, distance_mm=500)
-    elif Globals.AUTONOMOUS_TASK == AutonomousTask.SHOOT_PRELOAD:
-        # Autonomous to shoot a preload into the high goal from the center of the field
+        Motors.intake.stop()
+    elif Globals.AUTONOMOUS_TASK == AutonomousTask.SHOOT_PRELOAD_LEFT:
+        bprint("Autonomous:STATUS: Running shoot preload (left)")
+        # Autonomous to shoot a preload into the high goal from left position
         drivetrain.turn_to_heading(desired_heading=45)
         drivetrain.move_towards_heading(desired_heading=45, speed=50, distance_mm=1525)
         drivetrain.turn_to_heading(desired_heading=-35)
@@ -263,10 +288,34 @@ def on_autonomous() -> None:
         wait(2000)
         Motors.intake.stop()
         Motors.flywheel.stop()
-    elif Globals.AUTONOMOUS_TASK == AutonomousTask.LEFT_ROLLER:
+    elif Globals.AUTONOMOUS_TASK == AutonomousTask.SHOOT_PRELOAD_RIGHT:
+        bprint("Autonomous:STATUS: Running shoot preload (right)")
+        bprint("Autonomous:WARNING: Not tested")
+        # Autonomous to shoot a preload into the high goal from the right position
+        drivetrain.turn_to_heading(desired_heading=0)
+        drivetrain.move_towards_heading(desired_heading=0, speed=50, distance_mm=1000)
+        drivetrain.turn_to_heading(desired_heading=45)
+        drivetrain.move_towards_heading(desired_heading=45, speed=50, distance_mm=500)
+        drivetrain.turn_to_heading(desired_heading=35)
+        Motors.flywheel.set_velocity(80, PERCENT)
+        Motors.flywheel.spin(FORWARD)
+        while Motors.flywheel.velocity(PERCENT) < 60:
+            wait(10)
+        wait(3500)
+        Motors.intake.set_velocity(100, PERCENT)
+        Motors.intake.spin(FORWARD)
+        wait(750)
+        Motors.intake.spin(REVERSE)
+        wait(400)
+        Motors.intake.spin(FORWARD)
+        wait(2000)
+        Motors.intake.stop()
+        Motors.flywheel.stop()
+    elif Globals.AUTONOMOUS_TASK == AutonomousTask.ROLLER_LEFT:
         # Autonomous to roll the left roller without the optical sensor
         roll_roller()
-    elif Globals.AUTONOMOUS_TASK == AutonomousTask.RIGHT_ROLLER:
+    elif Globals.AUTONOMOUS_TASK == AutonomousTask.ROLLER_RIGHT:
+        bprint("Autonomous:STATUS: Rolling right roller")
         # Autonomous to roll the right roller without the optical sensor
         drivetrain.turn_to_heading(desired_heading=0)
         drivetrain.move_towards_heading(desired_heading=0, speed=-50, distance_mm=450)
@@ -274,7 +323,8 @@ def on_autonomous() -> None:
         drivetrain.move_towards_heading(desired_heading=55, speed=-50, distance_mm=280)
         drivetrain.turn_to_heading(desired_heading=90)
         roll_roller()
-    elif Globals.AUTONOMOUS_TASK == AutonomousTask.BOTH_ROLLERS:
+    elif Globals.AUTONOMOUS_TASK == AutonomousTask.ROLLER_BOTH:
+        bprint("Autonomous:STATUS: Rolling both rollers")
         # Autonomous to roll both rollers without the optical sensor
         roll_roller()
         drivetrain.turn_to_heading(desired_heading=0)
@@ -296,6 +346,7 @@ def on_autonomous() -> None:
         Motors.intake.stop()
         Motors.flywheel.stop()
     elif Globals.AUTONOMOUS_TASK == AutonomousTask.SKILLS:
+        bprint("Autonomous:STATUS: Running skills")
         # Autonomous to roll all four rollers without the optical sensor
         Motors.intake.set_velocity(100, PERCENT)
         Motors.intake.spin(FORWARD)
@@ -309,7 +360,7 @@ def on_autonomous() -> None:
         drivetrain.move_towards_heading(desired_heading=90, speed=-40, distance_mm=650)
         roll_roller(degrees=180)
         drivetrain.turn_to_heading(desired_heading=90)
-    bprint("Cleaning up...")
+    bprint("Autonomous:INFO: Cleaning up")
     Motors.intake.set_velocity(0, PERCENT)
     Motors.intake.stop()
     Motors.roller.set_velocity(0, PERCENT)
@@ -319,7 +370,7 @@ def on_autonomous() -> None:
     Motors.allWheels.set_velocity(0, PERCENT)
     Motors.allWheels.stop()
     Motors.allWheels.set_stopping(Globals.STOPPING_MODE)
-    bprint("Auton: Exit")
+    bprint("Autonomous:STATUS: Exit")
 
 
 def on_driver() -> None:
@@ -333,7 +384,7 @@ def on_driver() -> None:
     Motors.allWheels.spin(FORWARD)
     while True:
         if not Globals.PAUSE_DRIVER_CONTROL:
-            move_with_controller(left_side=Motors.leftDrivetrain, right_side=Motors.rightDrivetrain, controller=Sensors.primaryController, linearity=Globals.SPEED_CURVE_LINEARITY)
+            move_with_controller(left_side=Motors.leftDrivetrain, right_side=Motors.rightDrivetrain, controller=Controllers.primary, linearity=Globals.SPEED_CURVE_LINEARITY)
 
 
 # <editor-fold desc="Simple Button Handlers">
@@ -394,15 +445,27 @@ def loading_handler():
                 Motors.intake.set_velocity(80, PERCENT)
                 while get_optical_color(Sensors.optical_disk) != Color.YELLOW and Globals.INTAKE_ACTIVE:
                     Motors.intake.spin(FORWARD)
+                Motors.intake.stop()
                 if Globals.INTAKE_ACTIVE:
                     Motors.intake.spin_for(REVERSE, 30, DEGREES)
-                    Motors.intake.stop()
                     Globals.DISK_READY = True
                     Globals.INTAKE_ACTIVE = False
             if Globals.INTAKE_ACTIVE and Globals.DISK_READY:
                 Motors.intake.spin_for(FORWARD, 360, DEGREES)
                 Globals.INTAKE_ACTIVE = False
                 Globals.DISK_READY = False
+
+
+def reminder_handler():
+    """
+    Remind the user at certain time intervals by buzzing their controller
+    """
+    while not (competition.is_enabled() and competition.is_driver_control()):
+        wait(5)
+    while True:
+        if brain.timer.time(MSEC) - Globals.DRIVER_START_TIME_MSEC > Globals.EXPANSION_REMINDER_TIME_MSEC:
+            Controllers.secondary.haptic_feddback("...")
+            break
 
 
 def reset_loader():
@@ -423,9 +486,6 @@ def unload() -> None:
         return
     Globals.PAUSE_LOADING_THREAD = True
     Motors.intake.spin(REVERSE)
-    # while Sensors.controller.buttonX.pressing():
-    #     wait(5)
-    # Use this and comment out the above loop if you intend for the unload button to reverse for a set amount of time
     sleep(500)
     Motors.intake.stop()
     Globals.DISK_READY = False
@@ -441,30 +501,39 @@ def unload_no_reload() -> None:
         return
     Globals.PAUSE_LOADING_THREAD = True
     Motors.intake.spin(REVERSE)
-    while Sensors.primaryController.buttonR2.pressing():
+    while Controllers.primary.buttonR2.pressing():
         wait(5)
-    # Use this and comment out the above loop if you intend for the unload button to reverse for a set amount of time
     Motors.intake.stop()
     Globals.DISK_READY = False
     Globals.INTAKE_ACTIVE = False
     Globals.PAUSE_LOADING_THREAD = False
 
 
+def fire_expansion():
+    """
+    Fire the expansion module
+    """
+    Motors.expansion.set_velocity(100, PERCENT)
+    Motors.expansion.spin_for(FORWARD, 45, DEGREES)
+
+
 # Primary controller bindings
-Sensors.primaryController.buttonA.pressed(start_stop_flywheel)
-Sensors.primaryController.buttonB.pressed(start_loader)
-Sensors.primaryController.buttonX.pressed(unload)
-Sensors.primaryController.buttonR2.pressed(unload_no_reload)
-Sensors.primaryController.buttonL1.pressed(start_stop_roller)
-Sensors.primaryController.buttonR1.pressed(reset_loader)
+Controllers.primary.buttonA.pressed(start_stop_flywheel)
+Controllers.primary.buttonB.pressed(start_loader)
+Controllers.primary.buttonX.pressed(unload)
+Controllers.primary.buttonR2.pressed(unload_no_reload)
+Controllers.primary.buttonL1.pressed(start_stop_roller)
+Controllers.primary.buttonR1.pressed(reset_loader)
+Controllers.primary.buttonL2.pressed(fire_expansion)
 
 # Secondary controller bindings
-Sensors.secondaryController.buttonA.pressed(start_stop_flywheel)
-Sensors.secondaryController.buttonB.pressed(start_loader)
-Sensors.secondaryController.buttonX.pressed(unload)
-Sensors.secondaryController.buttonR2.pressed(unload_no_reload)
-Sensors.secondaryController.buttonL1.pressed(start_stop_roller)
-Sensors.secondaryController.buttonR1.pressed(reset_loader)
+Controllers.secondary.buttonA.pressed(start_stop_flywheel)
+Controllers.secondary.buttonB.pressed(start_loader)
+Controllers.secondary.buttonX.pressed(unload)
+Controllers.secondary.buttonR2.pressed(unload_no_reload)
+Controllers.secondary.buttonL1.pressed(start_stop_roller)
+Controllers.secondary.buttonR1.pressed(reset_loader)
+Controllers.secondary.buttonL2.pressed(fire_expansion)
 
 
 # <editor-fold desc="Competition State Handlers">
@@ -483,6 +552,7 @@ def driver_handler() -> None:
     Coordinate when to run the driver function using the vex competition library to read the game state.
     """
     driver_thread = Thread(on_driver)
+    Globals.DRIVER_START_TIME_MSEC = brain.timer.time()
     while competition.is_driver_control() and competition.is_enabled():
         sleep(10)
     driver_thread.stop()
@@ -493,28 +563,28 @@ competition = Competition(driver_handler, autonomous_handler)
 # </editor-fold>
 
 if __name__ == "__main__":
-    if Sensors.primaryController.buttonX.pressing():
+    brain.screen.set_font(FontType.MONO12)
+    if Controllers.primary.buttonX.pressing():
         cclear()
         cprint("Skipped setup")
         Globals.TEAM = Color.RED
         Globals.STOPPING_MODE = COAST
-        Globals.AUTONOMOUS_TASK = AutonomousTask.BOTH_ROLLERS
+        Globals.AUTONOMOUS_TASK = AutonomousTask.ROLLER_BOTH
     else:
         setup()
-    # Apply the effect of the variable set during setup
+    # Apply the effect of seting Globals.STOPPING_MODE during setup
     Motors.allWheels.set_stopping(Globals.STOPPING_MODE)
-    drivetrain = BetterDrivetrain(inertial=Sensors.inertial, left_side=Motors.leftDrivetrain, right_side=Motors.rightDrivetrain, heading_offset_tolerance=Globals.HEADING_OFFSET_TOLERANCE, turn_aggression=0.5, correction_aggression=1, wheel_radius_mm=50)
+    # Initialize a new smart drivetrain from our helper functions module (Not the vex one)
+    drivetrain = BetterDrivetrain(inertial=Sensors.inertial, left_side=Motors.leftDrivetrain, right_side=Motors.rightDrivetrain, wheel_radius_mm=50, turn_aggression=0.5, correction_aggression=0.5, heading_offset_tolerance=1)
     cprint("Calibrating Gyro...")
     # The following calibration sequence is supposed to minimize user error by detecting rapid inertial input changes and restarting calibration
-    calibrate_start_time = brain.timer.time(MSEC)
     Sensors.inertial.calibrate()  # Start a calibration
-    while brain.timer.time(MSEC) - calibrate_start_time < 1500:
+    while Sensors.inertial.is_calibrating():
         if any((
                 abs(Sensors.inertial.gyro_rate(AxisType.XAXIS, VelocityUnits.DPS)) > Globals.CALIBRATION_RESET_DPS_LIMIT,
                 abs(Sensors.inertial.gyro_rate(AxisType.YAXIS, VelocityUnits.DPS)) > Globals.CALIBRATION_RESET_DPS_LIMIT,
                 abs(Sensors.inertial.gyro_rate(AxisType.ZAXIS, VelocityUnits.DPS)) > Globals.CALIBRATION_RESET_DPS_LIMIT)):
             Sensors.inertial.calibrate()  # Restart a calibration
-            calibrate_start_time = brain.timer.time(MSEC)  # Reset the calibration start time
             cclear()
             bclear()
             cprint("Calibrating")
@@ -525,6 +595,6 @@ if __name__ == "__main__":
     Sensors.inertial.set_heading(0, DEGREES)
     cprint("Setup complete")
     bprint("Setup complete")
-
+    Thread(reminder_handler)
     Thread(loading_handler)
     Globals.SETUP_COMPLETE = True
