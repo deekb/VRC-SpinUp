@@ -207,7 +207,7 @@ def setup() -> None:
                 wait(5)
 
 
-def roll_roller(degrees=90):
+def roll_roller(degrees=90) -> None:
     """
     Roll the roller 90 degrees
     :param degrees: Degrees to spin the roller
@@ -427,7 +427,7 @@ def start_loader() -> None:
         Globals.INTAKE_ACTIVE = True
 
 
-def loading_handler():
+def loading_handler() -> None:
     """
     This function controls the smart loader and works with stopping it when the disk is loaded
     """
@@ -454,7 +454,7 @@ def loading_handler():
                 Globals.DISK_READY = False
 
 
-def reminder_handler():
+def reminder_handler() -> None:
     """
     Remind the user at certain time intervals by buzzing their controller
     """
@@ -466,7 +466,7 @@ def reminder_handler():
             break
 
 
-def reset_loader():
+def reset_loader() -> None:
     """
     Reset the state of the loader if it gets stuck
     """
@@ -507,7 +507,7 @@ def unload_no_reload() -> None:
     Globals.PAUSE_LOADING_THREAD = False
 
 
-def fire_expansion():
+def fire_expansion() -> None:
     """
     Fire the expansion module
     """
