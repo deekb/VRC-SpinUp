@@ -26,4 +26,5 @@ class AutonomousTask:
     ROLLER_RIGHT = 7
     ROLLER_BOTH = 8
     SKILLS = 9
-    DO_NOTHING = 10
+    DRIVETRAIN_TEST = 10
+    DO_NOTHING = 11

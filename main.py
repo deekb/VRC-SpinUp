@@ -5,7 +5,6 @@ Author: Derek Baier (deekb on GithHub)
 Project homepage: https://github.com/deekb/VRC-SpinUp
 Project archive: https://github.com/deekb/VRC-SpinUp/archive/master.zip
 Version: 2.4.18_stable
-Liscense: If you are using or modifying this for your own robot there is no need to give credit unless you think it neccesary
 Contact Derek.m.baier@gmail.com for more information
 """
 # <editor-fold desc="Imports and liscense">
@@ -22,7 +21,7 @@ __download_url__ = "https://github.com/deekb/VRC-SpinUp/archive/master.zip"
 __version__ = "2.4.18_stable"
 __author__ = "Derek Baier"
 __author_email__ = "Derek.m.baier@gmail.com"
-__license__ = "If you are using or modifying this for your own robot there is no need to give credit unless you think it neccesary"
+__license__ = "MIT"
 # </editor-fold>
 
 
@@ -33,7 +32,7 @@ brain.screen.draw_image_from_file('background.bmp', 0, 0)
 
 class Motors:
     """
-    A class containing references to all motors and motor groups attatched to the robot including PID enabled motors
+    A class containing references to all motors and motor groups attatched to the robot including motors with custom PIDs
     """
     # Motors:
     leftFrontMotor = Motor(Ports.PORT20, GearSetting.RATIO_18_1, True)
@@ -43,7 +42,7 @@ class Motors:
     roller = Motor(Ports.PORT19, GearSetting.RATIO_36_1, False)
     flywheel = CustomPID(Motor(Ports.PORT10, GearSetting.RATIO_36_1, True), kp=0.4, kd=0.05, t=0.01)
     intake = Motor(Ports.PORT13, GearSetting.RATIO_36_1, True)
-    expansion = Motor(Prrts.PORT, GearSetting.RATIO_36_1, False)
+    expansion = Motor(Ports.PORT15, GearSetting.RATIO_36_1, False)
     # Motor groups:
     leftDrivetrain = MotorGroup(leftFrontMotor, leftRearMotor)
     rightDrivetrain = MotorGroup(rightFrontMotor, rightRearMotor)
@@ -55,7 +54,7 @@ class Motors:
 
 class Sensors:
     """
-    A class that contains references to all sensors and other input devices attatched to the robot
+    A class that contains references to all sensors attatched to the robot
     """
     inertial = Inertial(Ports.PORT2)
     optical_roller = Optical(Ports.PORT14)
@@ -65,7 +64,7 @@ class Sensors:
 
 class Controllers:
     """
-    Primary and secondary controllers
+    A class that contains references to the primary and secondary controllers
     """
     primary = Controller(PRIMARY)
     secondary = Controller(PARTNER)
@@ -73,13 +72,13 @@ class Controllers:
 
 class Globals:
     """
-    Stores variable that may need to be (or ought to be able to be) accessed by any function in the program, here you can set default/initial values for said variables
+    Stores variables that may need to be (or ought to be able to be) accessed by any function in the program, here you can also set default/initial values for said variables
     """
     # SPEED_CURVE_LINEARITY is demonstrated on this graph https://www.desmos.com/calculator/zoc7drp2pc,
     # it should be set between 0.00 and 3.00 for optimal performance
     SPEED_CURVE_LINEARITY = 0.35
-    ULTRASONIC_BACKUP_COMPLETE_DISTANCE_MM = 125
-    AUTONOMOUS_TASK = AutonomousTask.ROLLER_LEFT
+    ULTRASONIC_BACKUP_COMPLETE_DISTANCE_MM = 125  # The distance between the ultrasonic sensor and the wall when the roller wheel is touching the roller
+    AUTONOMOUS_TASK = AutonomousTask.ROLLER_LEFT  # Initial autonomous task
     HEADING_OFFSET_TOLERANCE = 1  # How many degrees off is "Close enough"
     CALIBRATION_RESET_DPS_LIMIT = 5  # How many degrees per second does the inertial sensor have to report to invalidate and restart calibration
     EXPANSION_REMINDER_TIME_MSEC = 95000  # The amount of time after driver control starts that the program should vibrate the secondary controller
@@ -107,6 +106,7 @@ class Globals:
                         ("Plow disks", AutonomousTask.PUSH_IN_DISKS_WITH_PLOW),
                         ("Spit disks", AutonomousTask.SPIT_OUT_DISKS_WITH_INTAKE),
                         ("Low goal", AutonomousTask.SCORE_IN_LOW_GOAL),
+                        ("Test drivetrain", AutonomousTask.DRIVETRAIN_TEST),
                         ("Nothing", AutonomousTask.DO_NOTHING)])
     )
 
@@ -209,13 +209,13 @@ def setup() -> None:
 
 def roll_roller(degrees=90) -> None:
     """
-    Roll the roller 90 degrees
+    Spin the roller
     :param degrees: Degrees to spin the roller
     :type degrees: float
     """
-    Sensors.optical_roller.gesture_disable()
-    Sensors.optical_roller.set_light_power(100, PERCENT)
-    Sensors.optical_roller.set_light(LedStateType.ON)
+    # Sensors.optical_roller.gesture_disable()
+    # Sensors.optical_roller.set_light_power(100, PERCENT)
+    # Sensors.optical_roller.set_light(LedStateType.ON)
     Motors.allWheels.set_stopping(COAST)  # Always good while running into things
     Motors.allWheels.set_velocity(-15, PERCENT)
     Motors.roller.set_velocity(80)
@@ -240,7 +240,7 @@ def on_autonomous() -> None:
     brain.screen.set_font(FontType.MONO12)
     Motors.roller.set_stopping(HOLD)
     Motors.allWheels.set_stopping(BRAKE)
-    Sensors.inertial.set_heading(0, DEGREES)
+    drivetrain.reset()
     bprint("Autonomous: START")
     if Globals.AUTONOMOUS_TASK == AutonomousTask.DO_NOTHING:
         # Autonomous to well... do nothing!
@@ -248,6 +248,16 @@ def on_autonomous() -> None:
     if Globals.AUTONOMOUS_TASK == AutonomousTask.DRIVETRAIN_TEST:
         # Test the drivetrain
         bprint("Autonomous:STATUS: Tesing drivetrain")
+        drivetrain.move_towards_heading(desired_heading=0, speed=20, distance_mm=500)
+        drivetrain.move_towards_heading(desired_heading=90, speed=30, distance_mm=500)
+        drivetrain.move_towards_heading(desired_heading=180, speed=40, distance_mm=500)
+        drivetrain.move_towards_heading(desired_heading=270, speed=50, distance_mm=500)
+        drivetrain.move_towards_heading(desired_heading=0, speed=20, distance_mm=1000)
+        drivetrain.move_towards_heading(desired_heading=0, speed=-20, distance_mm=500)
+        drivetrain.move_towards_heading(desired_heading=90, speed=-30, distance_mm=500)
+        drivetrain.move_towards_heading(desired_heading=0, speed=-40, distance_mm=500)
+        drivetrain.move_towards_heading(desired_heading=-90, speed=-50, distance_mm=500)
+        bprint("Autonomous:STATUS: Test complete")
     if Globals.AUTONOMOUS_TASK == AutonomousTask.SCORE_IN_LOW_GOAL:
         bprint("Autonomous:STATUS: Running score in low goal")
         raise NotImplementedError("Scoring in low goal not implemented")
@@ -331,6 +341,7 @@ def on_autonomous() -> None:
     elif Globals.AUTONOMOUS_TASK == AutonomousTask.ROLLER_BOTH:
         bprint("Autonomous:STATUS: Rolling both rollers")
         # Autonomous to roll both rollers without the optical sensor
+        drivetrain.turn_to_heading(desired_heading=0)
         roll_roller()
         drivetrain.turn_to_heading(desired_heading=0)
         drivetrain.move_towards_heading(desired_heading=0, speed=40, distance_mm=100)
@@ -340,16 +351,16 @@ def on_autonomous() -> None:
         drivetrain.move_towards_heading(desired_heading=45, speed=70, distance_mm=1700)
         drivetrain.turn_to_heading(desired_heading=90)
         Motors.intake.set_velocity(50, PERCENT)
-        Motors.flywheel.set_velocity(20, PERCENT)
+        Motors.flywheel.set_velocity(80, PERCENT)
         Motors.intake.spin(FORWARD)
         Motors.flywheel.spin(FORWARD)
         drivetrain.move_towards_heading(desired_heading=90, speed=40, distance_mm=140)
         drivetrain.turn_to_heading(desired_heading=-135)
         drivetrain.move_towards_heading(desired_heading=-135, speed=-40, distance_mm=500)
-        drivetrain.turn_to_heading(desired_heading=-90)
-        roll_roller()
         Motors.intake.stop()
         Motors.flywheel.stop()
+        drivetrain.turn_to_heading(desired_heading=-90)
+        roll_roller()
     elif Globals.AUTONOMOUS_TASK == AutonomousTask.SKILLS:
         bprint("Autonomous:STATUS: Running skills")
         # Autonomous to roll all four rollers without the optical sensor
@@ -465,11 +476,11 @@ def reminder_handler() -> None:
     """
     Remind the user at certain time intervals by buzzing their controller
     """
-    while not (competition.is_enabled() and competition.is_driver_control()):
+    while not (competition.is_enabled() and competition.is_driver_control()) and Globals.SETUP_COMPLETE:
         wait(5)
     while True:
         if brain.timer.time(MSEC) - Globals.DRIVER_START_TIME_MSEC > Globals.EXPANSION_REMINDER_TIME_MSEC:
-            Controllers.secondary.haptic_feddback("...")
+            Controllers.secondary.rumble("....")
             break
 
 
@@ -597,7 +608,6 @@ if __name__ == "__main__":
             bprint("Do not touch the robot during calibration")
             bprint("If you did not touch the robot, increase GLobals.CALIBRATION_RESET_DPS_LIMIT")
     cclear()
-    Sensors.inertial.set_heading(0, DEGREES)
     cprint("Setup complete")
     bprint("Setup complete")
     Thread(reminder_handler)

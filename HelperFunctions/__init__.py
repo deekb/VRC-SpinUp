@@ -46,7 +46,7 @@ def get_optical_color(optical_sensor: Optical) -> int:
     :param optical_sensor: The sensor to read from
     :type optical_sensor: Optical
     :rtype: int
-    :returns: Color.RED, Color.BLUE, or None
+    :returns: Color.RED, Color.BLUE, Colot.YELLOW, or None
     """
     optical_hue = optical_sensor.hue()
     if optical_hue < 30 or optical_hue > 340:
@@ -74,7 +74,7 @@ class BetterDrivetrain:
         :param heading_offset_tolerance: The delta heading that is acceptable or close enough
         :param turn_aggression: How aggressive to be while turning
         :param correction_aggression: How aggressive to be while correcting movements
-        :param wheel_radius_mm: The radis of the wheels
+        :param wheel_radius_mm: The radius of the wheels
         """
         self.inertial = inertial
         self.left_side = left_side
@@ -142,6 +142,7 @@ class BetterDrivetrain:
         if relative:
             desired_heading += self.current_heading
         desired_heading %= 360
+        turn_to_heading(desired_heading=desired_heading)
         initial_speed = speed
         initial_distance_traveled = (((
                                                   self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm
@@ -173,6 +174,13 @@ class BetterDrivetrain:
                 self.right_side.set_velocity(delta_heading * turn_aggression + speed, PERCENT)
         self.drivetrain_motors.stop()
         self.current_heading = desired_heading
+
+    def reset(self):
+        """
+        Reset the heading
+        """
+        self.inertial.set_heading(0, DEGREES)
+        self.current_heading = 0
 
 
 class CustomPID:
