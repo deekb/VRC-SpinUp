@@ -2,6 +2,7 @@
 Helper functions for our program
 """
 from vex import *
+import math
 from Constants import Color, AutonomousTask
 
 
@@ -28,7 +29,7 @@ def controller_input_to_motor_power(controller_l: tuple, controller_r: tuple, li
     :param controller_r: The left stick's (X, Y) pair
     :type controller_r: tuple[float, float]
     :rtype: tuple[float, float]
-    :returns: A tuple of (left_motor_power, right_motor_power)
+    :returns: (left_motor_power, right_motor_power)
     """
     controller_l_x, controller_l_y = controller_l
     controller_r_x, controller_r_y = controller_r
@@ -65,7 +66,7 @@ class BetterDrivetrain:
 
     def __init__(self, inertial: Inertial, left_side: MotorGroup, right_side: MotorGroup,
                  heading_offset_tolerance: float, wheel_radius_mm: float, turn_aggression: float = 0.5,
-                 correction_aggression: float = 0.5, ) -> None:
+                 correction_aggression: float = 0.5, motor_stall_speed: float = 5) -> None:
         """
         Initialize a new drivetrain with the specified properties
         :param inertial: The inertial sensor to use for the drivetrain
@@ -75,6 +76,7 @@ class BetterDrivetrain:
         :param turn_aggression: How aggressive to be while turning
         :param correction_aggression: How aggressive to be while correcting movements
         :param wheel_radius_mm: The radius of the wheels
+        :param motor_stall_speed: The speed at which the motors just barely can't spin
         """
         self.inertial = inertial
         self.left_side = left_side
@@ -83,8 +85,11 @@ class BetterDrivetrain:
         self.turn_aggression = turn_aggression
         self.correction_aggression = correction_aggression
         self.wheel_radius_mm = wheel_radius_mm
-        self.wheel_circumference_mm = 2 * wheel_radius_mm * 3.141592
+        self.motor_stall_speed = motor_stall_speed
+        self.wheel_circumference_mm = wheel_radius_mm * 6.2832  # Wheel radius time 2 pi
         self.current_heading = 0
+        self.current_x = 0
+        self.current_y = 0
 
     def turn_to_heading(self, desired_heading: float, relative: bool = False) -> None:
         """
@@ -113,12 +118,14 @@ class BetterDrivetrain:
         while abs(delta_heading) > self.heading_offset_tolerance:
             if left_turn_difference < right_turn_difference:
                 delta_heading = left_turn_difference
-                self.left_side.set_velocity(delta_heading * self.turn_aggression + 5, PERCENT)
-                self.right_side.set_velocity((delta_heading * self.turn_aggression + 5) * -1, PERCENT)
+                self.left_side.set_velocity(delta_heading * self.turn_aggression + self.motor_stall_speed, PERCENT)
+                self.right_side.set_velocity((
+                                                         delta_heading * self.turn_aggression + self.motor_stall_speed) * -1, PERCENT)
             else:
                 delta_heading = right_turn_difference
-                self.left_side.set_velocity((delta_heading * self.turn_aggression + 5) * -1, PERCENT)
-                self.right_side.set_velocity(delta_heading * self.turn_aggression + 5, PERCENT)
+                self.left_side.set_velocity((
+                                                        delta_heading * self.turn_aggression + self.motor_stall_speed) * -1, PERCENT)
+                self.right_side.set_velocity(delta_heading * self.turn_aggression + self.motor_stall_speed, PERCENT)
             current_heading = self.inertial.heading(DEGREES) % 360
             left_turn_difference = current_heading - desired_heading
             right_turn_difference = desired_heading - current_heading
@@ -142,14 +149,15 @@ class BetterDrivetrain:
         if relative:
             desired_heading += self.current_heading
         desired_heading %= 360
-        turn_to_heading(desired_heading=desired_heading)
         initial_speed = speed
         initial_distance_traveled = (((
                                                   self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm
         distance_traveled = abs((((
                                               self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
-        self.drivetrain_motors.set_velocity(0, PERCENT)
-        self.drivetrain_motors.spin(FORWARD)
+        self.left_side.set_velocity(0, PERCENT)
+        self.right_side.set_velocity(0, PERCENT)
+        self.left_side.spin(FORWARD)
+        self.right_side.spin(FORWARD)
         while distance_traveled < distance_mm:
             distance_traveled = abs((((
                                                   self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
@@ -157,23 +165,38 @@ class BetterDrivetrain:
                 speed = initial_speed * ((distance_mm - distance_traveled) / 30)
             else:
                 speed = initial_speed
-            current_heading = self.inertial.heading(DEGREES) % 360
+            current_heading = self.inertial.heading(DEGREES) % 360  # Get the current heading and ensure it is between 0 and 360
             left_turn_difference = (current_heading - desired_heading)
             right_turn_difference = (desired_heading - current_heading)
-            if left_turn_difference < 0:
+            if left_turn_difference < 0:  # Ensure that the values are in range -180 to 180
                 left_turn_difference += 360
             if right_turn_difference < 0:
                 right_turn_difference += 360
             if left_turn_difference < right_turn_difference:  # Turn towards the most efficient direction
                 delta_heading = left_turn_difference
-                self.left_side.set_velocity(delta_heading * turn_aggression + speed, PERCENT)
-                self.right_side.set_velocity((delta_heading * turn_aggression - speed) * -1, PERCENT)
+                self.left_side.set_velocity(delta_heading * self.correction_aggression + speed, PERCENT)
+                self.right_side.set_velocity((delta_heading * self.correction_aggression - speed) * -1, PERCENT)
             else:
                 delta_heading = right_turn_difference
-                self.left_side.set_velocity((delta_heading * turn_aggression - speed) * -1, PERCENT)
-                self.right_side.set_velocity(delta_heading * turn_aggression + speed, PERCENT)
-        self.drivetrain_motors.stop()
+                self.left_side.set_velocity((delta_heading * self.correction_aggression - speed) * -1, PERCENT)
+                self.right_side.set_velocity(delta_heading * self.correction_aggression + speed, PERCENT)
+        self.left_side.stop()
+        self.right_side.stop()
         self.current_heading = desired_heading
+        self.current_x += math.cos(desired_heading * 3.1416 / 180) * distance_mm
+        self.current_y += math.sin(desired_heading * 3.1416 / 180) * distance_mm
+
+    def move_to_position(self, x: float, y: float, speed: float) -> None:
+        """
+        Move to an x, y position
+        :param x: The x position to mave to
+        :param y: The y position to mave to
+        :param speed: The speed to move at
+        """
+        angle = math.atan2(x - self.current_x, y - self.current_y)
+        distance = sqrt((x - self.current_x) ** 2 + (y - self.current_y) ** 2)
+        self.turn_to_heading(desired_heading=angle)
+        self.move_towards_heading(desired_heading=angle, speed=speed, distance_mm=distance)
 
     def reset(self):
         """
@@ -181,6 +204,8 @@ class BetterDrivetrain:
         """
         self.inertial.set_heading(0, DEGREES)
         self.current_heading = 0
+        self.current_x = 0
+        self.current_y = 0
 
 
 class CustomPID:

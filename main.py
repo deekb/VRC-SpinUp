@@ -4,7 +4,7 @@ Team: 3773P (Bowbots Phosphorus)
 Author: Derek Baier (deekb on GithHub)
 Project homepage: https://github.com/deekb/VRC-SpinUp
 Project archive: https://github.com/deekb/VRC-SpinUp/archive/master.zip
-Version: 2.4.18_stable
+Version: 2.5.1_stable
 Contact Derek.m.baier@gmail.com for more information
 """
 # <editor-fold desc="Imports and liscense">
@@ -18,7 +18,7 @@ __description__ = "Competition Code for VRC: Spin-Up 2022-2023"
 __team__ = "3773P (Bowbots Phosphorus)"
 __url__ = "https://github.com/deekb/VRC-SpinUp"
 __download_url__ = "https://github.com/deekb/VRC-SpinUp/archive/master.zip"
-__version__ = "2.4.18_stable"
+__version__ = "2.5.1_stable"
 __author__ = "Derek Baier"
 __author_email__ = "Derek.m.baier@gmail.com"
 __license__ = "MIT"
@@ -81,7 +81,6 @@ class Globals:
     AUTONOMOUS_TASK = AutonomousTask.ROLLER_LEFT  # Initial autonomous task
     HEADING_OFFSET_TOLERANCE = 1  # How many degrees off is "Close enough"
     CALIBRATION_RESET_DPS_LIMIT = 5  # How many degrees per second does the inertial sensor have to report to invalidate and restart calibration
-    EXPANSION_REMINDER_TIME_MSEC = 95000  # The amount of time after driver control starts that the program should vibrate the secondary controller
     TEAM = None
     SETUP_COMPLETE = False
     PAUSE_DRIVER_CONTROL = False
@@ -109,12 +108,17 @@ class Globals:
                         ("Test drivetrain", AutonomousTask.DRIVETRAIN_TEST),
                         ("Nothing", AutonomousTask.DO_NOTHING)])
     )
+    # All timers are in milliseconds from driver control start and will be canceled if the competition switches state during the timer
+    # and re-started when it switches back. every "." is a short rumble and every "-" is a long rumble
+    TIMERS = {
+        (95000, "...")  # Reminder to expand
+    }
 
 
 # <editor-fold desc="Print/Clear functions">
 def bprint(string) -> None:
     """
-    Print a string to the brain screen
+    Prints a string to the brain's screen
     :param string: the string to print to the screen
     """
     brain.screen.print(string)
@@ -123,7 +127,7 @@ def bprint(string) -> None:
 
 def bclear() -> None:
     """
-    Clears the brain screen
+    Clears the brain's screen
     """
     brain.screen.clear_screen()
     brain.screen.set_cursor(1, 1)
@@ -131,7 +135,7 @@ def bclear() -> None:
 
 def cprint(string, controller: Controller = Controllers.primary) -> None:
     """
-    Print a string to the controller screen
+    Prints a string to a controller's screen
     :param controller: The controller to print to
     :param string: the string to print to the screen
     """
@@ -236,7 +240,7 @@ def on_autonomous() -> None:
     # Wait for setup to be complete
     if not Globals.SETUP_COMPLETE:
         return
-    global drivetrain
+    global drivetrain  # Ensure we can access the custom drivetrain
     brain.screen.set_font(FontType.MONO12)
     Motors.roller.set_stopping(HOLD)
     Motors.allWheels.set_stopping(BRAKE)
@@ -248,15 +252,25 @@ def on_autonomous() -> None:
     if Globals.AUTONOMOUS_TASK == AutonomousTask.DRIVETRAIN_TEST:
         # Test the drivetrain
         bprint("Autonomous:STATUS: Tesing drivetrain")
+        drivetrain.turn_to_heading(desired_heading=0)
         drivetrain.move_towards_heading(desired_heading=0, speed=20, distance_mm=500)
+        drivetrain.turn_to_heading(desired_heading=90)
         drivetrain.move_towards_heading(desired_heading=90, speed=30, distance_mm=500)
+        drivetrain.turn_to_heading(desired_heading=180)
         drivetrain.move_towards_heading(desired_heading=180, speed=40, distance_mm=500)
+        drivetrain.turn_to_heading(desired_heading=270)
         drivetrain.move_towards_heading(desired_heading=270, speed=50, distance_mm=500)
+        drivetrain.turn_to_heading(desired_heading=0)
         drivetrain.move_towards_heading(desired_heading=0, speed=20, distance_mm=1000)
+        drivetrain.turn_to_heading(desired_heading=0)
         drivetrain.move_towards_heading(desired_heading=0, speed=-20, distance_mm=500)
+        drivetrain.turn_to_heading(desired_heading=90)
         drivetrain.move_towards_heading(desired_heading=90, speed=-30, distance_mm=500)
+        drivetrain.turn_to_heading(desired_heading=0)
         drivetrain.move_towards_heading(desired_heading=0, speed=-40, distance_mm=500)
+        drivetrain.turn_to_heading(desired_heading=-90)
         drivetrain.move_towards_heading(desired_heading=-90, speed=-50, distance_mm=500)
+        drivetrain.move_to_position(x=0, y=0, speed=20)
         bprint("Autonomous:STATUS: Test complete")
     if Globals.AUTONOMOUS_TASK == AutonomousTask.SCORE_IN_LOW_GOAL:
         bprint("Autonomous:STATUS: Running score in low goal")
@@ -478,9 +492,13 @@ def reminder_handler() -> None:
     """
     while not (competition.is_enabled() and competition.is_driver_control()) and Globals.SETUP_COMPLETE:
         wait(5)
-    while True:
-        if brain.timer.time(MSEC) - Globals.DRIVER_START_TIME_MSEC > Globals.EXPANSION_REMINDER_TIME_MSEC:
-            Controllers.secondary.rumble("....")
+    times_sorted = sorted(Globals.TIMERS)
+    for reminder_time in times_sorted:
+        while brain.timer.time(MSEC) - Globals.DRIVER_START_TIME_MSEC < reminder_time and competition.is_driver_control() and competition.is_enabled():
+            pass
+        if competition.is_driver_control() and competition.is_enabled():
+            Controllers.secondary.rumble(Globals.TIMERS[reminder_time])
+        else:
             break
 
 
@@ -568,6 +586,8 @@ def driver_handler() -> None:
     Coordinate when to run the driver function using the vex competition library to read the game state.
     """
     driver_thread = Thread(on_driver)
+    Thread(reminder_handler)
+    Thread(loading_handler)
     Globals.DRIVER_START_TIME_MSEC = brain.timer.time()
     while competition.is_driver_control() and competition.is_enabled():
         sleep(10)
@@ -590,17 +610,26 @@ if __name__ == "__main__":
         setup()
     # Apply the effect of seting Globals.STOPPING_MODE during setup
     Motors.allWheels.set_stopping(Globals.STOPPING_MODE)
+    # Reset the expansion
+    Motors.expansion.set_velocity(30, PERCENT)
+    Motors.expansion.spin(REVERSE)
+    Motors.expansion.set_stopping(COAST)  # Don't burn out the motor
+    wait(100)
+    while Motors.expansion.efficiency(PERCENT) > 20:  # Wait until the motor can't move
+        wait(10)
+    Motors.expansion.set_stopping(HOLD)
+    Motors.expansion.spin_for(FORWARD, 5, DEGREES)
     # Initialize a new smart drivetrain from our helper functions module (Not the vex one)
-    drivetrain = BetterDrivetrain(inertial=Sensors.inertial, left_side=Motors.leftDrivetrain, right_side=Motors.rightDrivetrain, wheel_radius_mm=50, turn_aggression=0.5, correction_aggression=0.5, heading_offset_tolerance=1)
+    drivetrain = BetterDrivetrain(inertial=Sensors.inertial, left_side=Motors.leftDrivetrain, right_side=Motors.rightDrivetrain, wheel_radius_mm=50, turn_aggression=0.4, correction_aggression=0.5, heading_offset_tolerance=1)
     cprint("Calibrating Gyro...")
     # The following calibration sequence is supposed to minimize user error by detecting rapid inertial input changes and restarting calibration
-    Sensors.inertial.calibrate()  # Start a calibration
+    Sensors.inertial.calibrate()  # Start calibration
     while Sensors.inertial.is_calibrating():
         if any((
                 abs(Sensors.inertial.gyro_rate(AxisType.XAXIS, VelocityUnits.DPS)) > Globals.CALIBRATION_RESET_DPS_LIMIT,
                 abs(Sensors.inertial.gyro_rate(AxisType.YAXIS, VelocityUnits.DPS)) > Globals.CALIBRATION_RESET_DPS_LIMIT,
                 abs(Sensors.inertial.gyro_rate(AxisType.ZAXIS, VelocityUnits.DPS)) > Globals.CALIBRATION_RESET_DPS_LIMIT)):
-            Sensors.inertial.calibrate()  # Restart a calibration
+            Sensors.inertial.calibrate()  # Restart calibration
             cclear()
             bclear()
             cprint("Calibrating")
@@ -610,6 +639,4 @@ if __name__ == "__main__":
     cclear()
     cprint("Setup complete")
     bprint("Setup complete")
-    Thread(reminder_handler)
-    Thread(loading_handler)
     Globals.SETUP_COMPLETE = True
