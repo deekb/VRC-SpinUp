@@ -42,7 +42,7 @@ class Motors:
     roller = Motor(Ports.PORT19, GearSetting.RATIO_36_1, False)
     flywheel = CustomPID(Motor(Ports.PORT10, GearSetting.RATIO_36_1, True), kp=0.4, kd=0.05, t=0.01)
     intake = Motor(Ports.PORT13, GearSetting.RATIO_36_1, True)
-    expansion = Motor(Ports.PORT15, GearSetting.RATIO_36_1, False)
+    expansion = Motor(Ports.PORT15, GearSetting.RATIO_36_1, True)
     # Motor groups:
     leftDrivetrain = MotorGroup(leftFrontMotor, leftRearMotor)
     rightDrivetrain = MotorGroup(rightFrontMotor, rightRearMotor)
@@ -86,6 +86,10 @@ class Globals:
     PAUSE_DRIVER_CONTROL = False
     STOPPING_MODE = COAST
     FLYWHEEL_ACTIVE = False
+    FLYWHEEL_STABLIZED = False
+    FLYWHEEL_TARGET_POWER = 65
+    FLYWHEEL_START_TIME_MSEC = None
+    FLYWHEEL_SPINUP_TIME_MSEC = 2000  # If the flywheel reports spinup in < 2000 ms then wait the 2000 ms
     ROLLER_ACTIVE = False
     INTAKE_ACTIVE = False
     DISK_READY = False
@@ -111,7 +115,7 @@ class Globals:
     # All timers are in milliseconds from driver control start and will be canceled if the competition switches state during the timer
     # and re-started when it switches back. every "." is a short rumble and every "-" is a long rumble
     TIMERS = {
-        (95000, "...")  # Reminder to expand
+        95000: "..."  # Reminder to expand
     }
 
 
@@ -427,11 +431,14 @@ def start_stop_flywheel() -> None:
     if not Globals.SETUP_COMPLETE:
         return
     Globals.FLYWHEEL_ACTIVE = not Globals.FLYWHEEL_ACTIVE
+    Globals.FLYWHEEL_STABLIZED = False
     if Globals.FLYWHEEL_ACTIVE:
-        Motors.flywheel.set_velocity(65, PERCENT)
+        Motors.flywheel.set_velocity(Globals.FLYWHEEL_TARGET_POWER, PERCENT)
         Motors.flywheel.spin(FORWARD)
+        Globals.FLYWHEEL_START_TIME_MSEC = brain.timer.time(MSEC)
     else:
         Motors.flywheel.stop()
+        Globals.FLYWHEEL_STABLIZED = False
 
 
 def start_stop_roller() -> None:
@@ -502,6 +509,18 @@ def reminder_handler() -> None:
             break
 
 
+def flywheel_spinup_haptics_handler():
+    """
+    Handle when to vibrate the controller because the flywheel is spun up
+    """
+    while True:
+        while (not Globals.FLYWHEEL_ACTIVE) or Globals.FLYWHEEL_STABLIZED:
+            wait(5)
+        if Motors.flywheel.velocity(PERCENT) > Globals.FLYWHEEL_TARGET_POWER and brain.timer.time(MSEC) - Globals.FLYWHEEL_START_TIME_MSEC > Globals.FLYWHEEL_SPINUP_TIME_MSEC:
+            Globals.FLYWHEEL_STABLIZED = True
+            Controllers.primary.rumble("...")
+
+
 def reset_loader() -> None:
     """
     Reset the state of the loader if it gets stuck
@@ -547,8 +566,16 @@ def fire_expansion() -> None:
     """
     Fire the expansion module
     """
+    Motors.expansion.set_stopping(COAST)
     Motors.expansion.set_velocity(100, PERCENT)
     Motors.expansion.spin_for(FORWARD, 45, DEGREES)
+
+
+def reset_expansion() -> None:
+    """
+    Reset the expansion mechanism
+    """
+    pass
 
 
 # Primary controller bindings
@@ -568,6 +595,7 @@ Controllers.secondary.buttonR2.pressed(unload_no_reload)
 Controllers.secondary.buttonL1.pressed(start_stop_roller)
 Controllers.secondary.buttonR1.pressed(reset_loader)
 Controllers.secondary.buttonL2.pressed(fire_expansion)
+Controllers.secondary.buttonY.pressed(reset_expansion)
 
 
 # <editor-fold desc="Competition State Handlers">
@@ -586,12 +614,14 @@ def driver_handler() -> None:
     Coordinate when to run the driver function using the vex competition library to read the game state.
     """
     driver_thread = Thread(on_driver)
-    Thread(reminder_handler)
-    Thread(loading_handler)
+    reminder_thread = Thread(reminder_handler)
+    loading_thread = Thread(loading_handler)
+    flywheel_haptics_thread = Thread(flywheel_spinup_haptics_handler)
     Globals.DRIVER_START_TIME_MSEC = brain.timer.time()
     while competition.is_driver_control() and competition.is_enabled():
         sleep(10)
-    driver_thread.stop()
+    for thread in (driver_thread, reminder_thread, loading_thread, flywheel_haptics_thread):
+        thread.stop()
 
 
 # Register the competition functions
@@ -614,11 +644,9 @@ if __name__ == "__main__":
     Motors.expansion.set_velocity(30, PERCENT)
     Motors.expansion.spin(REVERSE)
     Motors.expansion.set_stopping(COAST)  # Don't burn out the motor
-    wait(100)
-    while Motors.expansion.efficiency(PERCENT) > 20:  # Wait until the motor can't move
-        wait(10)
+    wait(2000)
     Motors.expansion.set_stopping(HOLD)
-    Motors.expansion.spin_for(FORWARD, 5, DEGREES)
+    Motors.expansion.spin_for(FORWARD, 15, DEGREES)
     # Initialize a new smart drivetrain from our helper functions module (Not the vex one)
     drivetrain = BetterDrivetrain(inertial=Sensors.inertial, left_side=Motors.leftDrivetrain, right_side=Motors.rightDrivetrain, wheel_radius_mm=50, turn_aggression=0.4, correction_aggression=0.5, heading_offset_tolerance=1)
     cprint("Calibrating Gyro...")
@@ -639,4 +667,6 @@ if __name__ == "__main__":
     cclear()
     cprint("Setup complete")
     bprint("Setup complete")
+    Controllers.primary.rumble("-")
+    Controllers.secondary.rumble("-")
     Globals.SETUP_COMPLETE = True
