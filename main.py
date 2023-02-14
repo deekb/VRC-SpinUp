@@ -74,7 +74,7 @@ class Globals:
     """
     Stores variables that may need to be (or ought to be able to be) accessed by any function in the program, here you can also set default/initial values for said variables
     """
-    # SPEED_CURVE_LINEARITY is demonstrated on this graph https://www.desmos.com/calculator/zoc7drp2pc,
+    # SPEED_CURVE_LINEARITY is demonstrated on this graph https://www.desmos.com/calculator/zoc7drp2pc
     # it should be set between 0.00 and 3.00 for optimal performance
     SPEED_CURVE_LINEARITY = 0.35
     ULTRASONIC_BACKUP_COMPLETE_DISTANCE_MM = 125  # The distance between the ultrasonic sensor and the wall when the roller wheel is touching the roller
@@ -95,6 +95,7 @@ class Globals:
     DISK_READY = False
     PAUSE_LOADING_THREAD = False
     DRIVER_START_TIME_MSEC = None
+    FLYWHEEL_AUTOSTART = False
     SETTINGS = (
         ("Team", [("Red", Color.RED),
                   ("Blue", Color.BLUE)]),
@@ -110,7 +111,8 @@ class Globals:
                         ("Spit disks", AutonomousTask.SPIT_OUT_DISKS_WITH_INTAKE),
                         ("Low goal", AutonomousTask.SCORE_IN_LOW_GOAL),
                         ("Test drivetrain", AutonomousTask.DRIVETRAIN_TEST),
-                        ("Nothing", AutonomousTask.DO_NOTHING)])
+                        ("Nothing", AutonomousTask.DO_NOTHING)]),
+        ("Flywheel autostart", [("Yes", True), ("No", False)])
     )
     # All timers are in milliseconds from driver control start and will be canceled if the competition switches state during the timer
     # and re-started when it switches back. every "." is a short rumble and every "-" is a long rumble
@@ -191,6 +193,8 @@ def setup() -> None:
                 Globals.STOPPING_MODE = value
             elif setting_index == 2:
                 Globals.AUTONOMOUS_TASK = value
+            elif setting_index == 3:
+                Globals.FLYWHEEL_AUTOSTART = value
             # Wait until a button is pressed
             while not any((Controllers.primary.buttonLeft.pressing(),
                            Controllers.primary.buttonRight.pressing(),
@@ -484,6 +488,10 @@ def loading_handler() -> None:
                     Motors.intake.spin(FORWARD)
                 Motors.intake.stop()
                 if Globals.INTAKE_ACTIVE:
+                    if Globals.FLYWHEEL_AUTOSTART:
+                        Globals.FLYWHEEL_ACTIVE = True
+                        Motors.flywheel.set_velocity(65, PERCENT)
+                        Motors.flywheel.spin(FORWARD)
                     Motors.intake.spin_for(REVERSE, 30, DEGREES)
                     Globals.DISK_READY = True
                     Globals.INTAKE_ACTIVE = False
@@ -636,6 +644,7 @@ if __name__ == "__main__":
         Globals.TEAM = Color.RED
         Globals.STOPPING_MODE = COAST
         Globals.AUTONOMOUS_TASK = AutonomousTask.ROLLER_BOTH
+        Globals.FLYWHEEL_AUTOSTART = True
     else:
         setup()
     # Apply the effect of seting Globals.STOPPING_MODE during setup
