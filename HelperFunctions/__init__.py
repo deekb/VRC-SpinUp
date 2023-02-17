@@ -69,18 +69,29 @@ class BetterDrivetrain:
     def __init__(self, inertial: Inertial, left_side: MotorGroup, right_side: MotorGroup,
                  heading_offset_tolerance: float, wheel_radius_mm: float, turn_aggression: float = 0.5,
                  correction_aggression: float = 0.5, motor_stall_speed: float = 5,
-                 driver_control_linearity: float = 0.45) -> None:
+                 driver_control_linearity: float = 0.45, movement_slowdown_threshhold: float = 200) -> None:
         """
         Initialize a new drivetrain with the specified properties
         :param inertial: The inertial sensor to use for the drivetrain
+        :type inertial: Inertial
         :param left_side: The motor/motor group corresponding to the left side of the robot
+        :type left_side: (Motor | MotorGroup)
         :param right_side: The motor/motor group corresponding to the right side of the robot
+        :type right_side: (Motor | MotorGroup)
         :param heading_offset_tolerance: The delta heading that is acceptable or close enough
+        :type heading_offset_tolerance: float
         :param turn_aggression: How aggressive to be while turning
+        :type turn_aggression: float
         :param correction_aggression: How aggressive to be while correcting movements
+        :type correction_aggression: float
         :param wheel_radius_mm: The radius of the wheels
+        :type wheel_radius_mm: float
         :param motor_stall_speed: The speed at which the motors just barely can't spin
+        :type motor_stall_speed: float
         :param driver_control_linearity: How close to linearly to map the controllers inputs to the motors outputs during the vubic normalization
+        :type driver_control_linearity: float
+        :param movement_slowdown_threshhold: The distance away from the target to
+        :type movement_slowdown_threshhold: float
         """
         self.inertial = inertial
         self.left_side = left_side
@@ -95,6 +106,7 @@ class BetterDrivetrain:
         self.current_x = 0
         self.current_y = 0
         self.driver_control_linearity = driver_control_linearity
+        self.movement_slowdown_threshhold = movement_slowdown_threshhold
 
     def turn_to_heading(self, desired_heading: float, relative: bool = False) -> None:
         """
@@ -155,19 +167,16 @@ class BetterDrivetrain:
             desired_heading += self.current_heading
         desired_heading %= 360
         initial_speed = speed
-        initial_distance_traveled = (((
-                                                  self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm
-        distance_traveled = abs((((
-                                              self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
+        initial_distance_traveled = (((self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm
+        distance_traveled = abs((((self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
         self.left_side.set_velocity(0, PERCENT)
         self.right_side.set_velocity(0, PERCENT)
         self.left_side.spin(FORWARD)
         self.right_side.spin(FORWARD)
         while distance_traveled < distance_mm:
-            distance_traveled = abs((((
-                                                  self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
+            distance_traveled = abs((((self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
             if distance_mm - distance_traveled < 200:
-                speed = initial_speed * ((distance_mm - distance_traveled) / 30)
+                speed = min(initial_speed * (distance_mm - distance_traveled) / 200 + min((self.motor_stall_speed + distance_mm - distance_traveled), self.motor_stall_speed), initial_speed)
             else:
                 speed = initial_speed
             current_heading = self.inertial.heading(DEGREES) % 360  # Get the current heading and ensure it is between 0 and 360
@@ -211,8 +220,8 @@ class BetterDrivetrain:
             (controller.axis4.position, controller.axis3.position),
             (controller.axis1.position, controller.axis2.position),
             linearity=self.driver_control_linearity)
-        left_side.set_velocity(left_speed, PERCENT)
-        right_side.set_velocity(right_speed, PERCENT)
+        self.left_side.set_velocity(left_speed, PERCENT)
+        self.right_side.set_velocity(right_speed, PERCENT)
 
     def reset(self):
         """

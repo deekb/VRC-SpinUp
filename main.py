@@ -4,13 +4,13 @@ Team: 3773P (Bowbots Phosphorus)
 Author: Derek Baier (deekb on GithHub)
 Project homepage: https://github.com/deekb/VRC-SpinUp
 Project archive: https://github.com/deekb/VRC-SpinUp/archive/master.zip
-Version: 2.5.2_stable
+Version: 2.6.0_stable
 Contact Derek.m.baier@gmail.com for more information
 """
 # <editor-fold desc="Imports and liscense">
 from vex import *
 from Constants import Color, AutonomousTask
-from HelperFunctions import BetterDrivetrain, cubic_normalize, controller_input_to_motor_power, move_with_controller, \
+from HelperFunctions import BetterDrivetrain, cubic_normalize, controller_input_to_motor_power, \
     get_optical_color, CustomPID, Logging
 
 __title__ = "Vex V5 2023 Competition code"
@@ -18,7 +18,7 @@ __description__ = "Competition Code for VRC: Spin-Up 2022-2023"
 __team__ = "3773P (Bowbots Phosphorus)"
 __url__ = "https://github.com/deekb/VRC-SpinUp"
 __download_url__ = "https://github.com/deekb/VRC-SpinUp/archive/master.zip"
-__version__ = "2.5.2_stable"
+__version__ = "2.6.0_stable"
 __author__ = "Derek Baier"
 __author_email__ = "Derek.m.baier@gmail.com"
 __license__ = "MIT"
@@ -76,7 +76,7 @@ class Globals:
     # SPEED_CURVE_LINEARITY is demonstrated on this graph https://www.desmos.com/calculator/zoc7drp2pc
     # it should be set between 0.00 and 3.00 for optimal performance
     SPEED_CURVE_LINEARITY = 0.35
-    ULTRASONIC_BACKUP_COMPLETE_DISTANCE_MM = 40  # The distance between the ultrasonic sensor and the wall when the flex wheel is touching the roller
+    ULTRASONIC_BACKUP_COMPLETE_DISTANCE_MM = 115  # The distance between the ultrasonic sensor and the wall when the flex wheel is touching the roller
     TEAM = None
     SETUP_COMPLETE = False
     PAUSE_DRIVER_CONTROL = False
@@ -653,9 +653,6 @@ def autonomous_handler() -> None:
     """
     Coordinate when to run the autonomous function using the vex competition library to read the game state.
     """
-    if not Globals.SETUP_COMPLETE:
-        bprint("[autonomous_handler]: setup not complete, ignoring request")
-        return
     autonomous_thread = Thread(on_autonomous)
     while competition.is_autonomous() and competition.is_enabled():
         sleep(10)
@@ -666,9 +663,6 @@ def driver_handler() -> None:
     """
     Coordinate when to run the driver function using the vex competition library to read the game state.
     """
-    if not Globals.SETUP_COMPLETE:
-        bprint("[driver_handler]: setup not complete, ignoring request")
-        return
     driver_thread = Thread(on_driver)
     reminder_thread = Thread(reminder_handler)
     loading_thread = Thread(loading_handler)
@@ -697,7 +691,7 @@ if __name__ == "__main__":
     # Apply the effect of seting Globals.STOPPING_MODE during setup
     Motors.allWheels.set_stopping(Globals.STOPPING_MODE)
     # Initialize a new smart drivetrain from our helper functions module (Not the vex one)
-    drivetrain = BetterDrivetrain(inertial=Sensors.inertial, left_side=Motors.leftDrivetrain, right_side=Motors.rightDrivetrain, wheel_radius_mm=50, turn_aggression=0.25, correction_aggression=0.25, heading_offset_tolerance=1)
+    drivetrain = BetterDrivetrain(inertial=Sensors.inertial, left_side=Motors.leftDrivetrain, right_side=Motors.rightDrivetrain, wheel_radius_mm=50, turn_aggression=0.25, correction_aggression=0.25, heading_offset_tolerance=1, motor_stall_speed=5, movement_slowdown_threshhold=200)
     cprint("Calibrating Gyro...")
     Sensors.inertial.calibrate()
     while Sensors.inertial.is_calibrating():
