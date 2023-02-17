@@ -5,6 +5,8 @@ from vex import *
 import math
 from Constants import Color, AutonomousTask
 
+brain = Brain()
+
 
 def cubic_normalize(value: float, linearity: float) -> float:
     """
@@ -66,7 +68,8 @@ class BetterDrivetrain:
 
     def __init__(self, inertial: Inertial, left_side: MotorGroup, right_side: MotorGroup,
                  heading_offset_tolerance: float, wheel_radius_mm: float, turn_aggression: float = 0.5,
-                 correction_aggression: float = 0.5, motor_stall_speed: float = 5) -> None:
+                 correction_aggression: float = 0.5, motor_stall_speed: float = 5,
+                 driver_control_linearity: float = 0.45) -> None:
         """
         Initialize a new drivetrain with the specified properties
         :param inertial: The inertial sensor to use for the drivetrain
@@ -77,6 +80,7 @@ class BetterDrivetrain:
         :param correction_aggression: How aggressive to be while correcting movements
         :param wheel_radius_mm: The radius of the wheels
         :param motor_stall_speed: The speed at which the motors just barely can't spin
+        :param driver_control_linearity: How close to linearly to map the controllers inputs to the motors outputs during the vubic normalization
         """
         self.inertial = inertial
         self.left_side = left_side
@@ -86,10 +90,11 @@ class BetterDrivetrain:
         self.correction_aggression = correction_aggression
         self.wheel_radius_mm = wheel_radius_mm
         self.motor_stall_speed = motor_stall_speed
-        self.wheel_circumference_mm = wheel_radius_mm * 6.2832  # Wheel radius time 2 pi
+        self.wheel_circumference_mm = wheel_radius_mm * math.pi * 2
         self.current_heading = 0
         self.current_x = 0
         self.current_y = 0
+        self.driver_control_linearity = driver_control_linearity
 
     def turn_to_heading(self, desired_heading: float, relative: bool = False) -> None:
         """
@@ -161,7 +166,7 @@ class BetterDrivetrain:
         while distance_traveled < distance_mm:
             distance_traveled = abs((((
                                                   self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
-            if distance_mm - distance_traveled < 20:
+            if distance_mm - distance_traveled < 200:
                 speed = initial_speed * ((distance_mm - distance_traveled) / 30)
             else:
                 speed = initial_speed
@@ -183,8 +188,8 @@ class BetterDrivetrain:
         self.left_side.stop()
         self.right_side.stop()
         self.current_heading = desired_heading
-        self.current_x += math.cos(desired_heading * 3.1416 / 180) * distance_mm
-        self.current_y += math.sin(desired_heading * 3.1416 / 180) * distance_mm
+        self.current_x += math.cos(desired_heading * math.pi / 180) * distance_mm
+        self.current_y += math.sin(desired_heading * math.pi / 180) * distance_mm
 
     def move_to_position(self, x: float, y: float, speed: float) -> None:
         """
@@ -193,10 +198,21 @@ class BetterDrivetrain:
         :param y: The y position to mave to
         :param speed: The speed to move at
         """
-        angle = math.atan2(x - self.current_x, y - self.current_y)
-        distance = sqrt((x - self.current_x) ** 2 + (y - self.current_y) ** 2)
+        angle = math.atan2(x - self.current_x, y - self.current_y) * math.pi / 180
+        distance = sqrt(((x - self.current_x) ** 2 + (y - self.current_y) ** 2))
         self.turn_to_heading(desired_heading=angle)
         self.move_towards_heading(desired_heading=angle, speed=speed, distance_mm=distance)
+
+    def move_with_controller(self, controller: Controller) -> None:
+        """
+        Move using the controller input
+        """
+        left_speed, right_speed = controller_input_to_motor_power(
+            (controller.axis4.position, controller.axis3.position),
+            (controller.axis1.position, controller.axis2.position),
+            linearity=self.driver_control_linearity)
+        left_side.set_velocity(left_speed, PERCENT)
+        right_side.set_velocity(right_speed, PERCENT)
 
     def reset(self):
         """
@@ -288,13 +304,44 @@ class CustomPID:
         return self.motor_object.velocity(*args)
 
 
-def move_with_controller(controller, left_side: MotorGroup, right_side: MotorGroup, linearity: float) -> None:
+class Logging:
     """
-    Move using the controller input
+    run multiple logs in parallel
     """
-    left_speed, right_speed = controller_input_to_motor_power(
-        (controller.axis4.position, controller.axis3.position),
-        (controller.axis1.position, controller.axis2.position),
-        linearity=linearity)
-    left_side.set_velocity(left_speed, PERCENT)
-    right_side.set_velocity(right_speed, PERCENT)
+
+    def __init__(self, log_format: str, mode: str = "at"):
+        """
+        Create a new instance of the class
+        :param log_format: The format for the log, %s for the passed string, %m for time in milliseconds, %t for time in seconds %n for the passed function name
+        :type log_format: str
+        :param mode: The mode you want to open the file in
+        :type mode: str
+        """
+        self.log_format = log_format
+        try:
+            index_json = open("/Logs/index.json", "r").read()
+            index_json = eval(index_json)
+            index_json["Log number"] += 1
+            log_number = index_json["Log number"]
+            with open("/Logs/index.json", "wt") as file:
+                file.write(str(index_json))
+        except (OSError, AttributeError):
+            with open("/Logs/index.json", "wt") as file:
+                index_json = {"Log number": 0}
+                log_number = index_json["Log number"]
+                file.write(str(index_json))
+        self.file_object = open("/Logs/" + str(log_number) + ".log", mode)
+
+    def log(self, string, function_name=None):
+        """
+        Send a string to the file
+        :param string:
+        :param function_name:
+        """
+        self.file_object.write(self.log_format.replace("%s", str(string)).replace("%t", str(brain.timer.time(SECONDS))).replace("%m", str(brain.timer.time(MSEC))).replace("%n", str(function_name)))
+
+    def exit(self):
+        """
+        Close the log object
+        """
+        self.file_object.close()
