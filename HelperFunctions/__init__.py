@@ -5,6 +5,8 @@ from vex import *
 import math
 from Constants import Color, AutonomousTask
 
+brain = Brain()
+
 
 def cubic_normalize(value: float, linearity: float) -> float:
     """
@@ -183,8 +185,8 @@ class BetterDrivetrain:
         self.left_side.stop()
         self.right_side.stop()
         self.current_heading = desired_heading
-        self.current_x += math.cos(desired_heading * 3.1416 / 180) * distance_mm
-        self.current_y += math.sin(desired_heading * 3.1416 / 180) * distance_mm
+        self.current_x += math.cos(desired_heading * math.pi / 180) * distance_mm
+        self.current_y += math.sin(desired_heading * math.pi / 180) * distance_mm
 
     def move_to_position(self, x: float, y: float, speed: float) -> None:
         """
@@ -298,3 +300,46 @@ def move_with_controller(controller, left_side: MotorGroup, right_side: MotorGro
         linearity=linearity)
     left_side.set_velocity(left_speed, PERCENT)
     right_side.set_velocity(right_speed, PERCENT)
+
+
+class Logging:
+    """
+    run multiple logs in parallel
+    """
+
+    def __init__(self, log_format: str, mode: str = "at"):
+        """
+        Create a new instance of the class
+        :param log_format: The format for the log, %s for the passed string, %m for time in milliseconds, %t for time in seconds %n for the passed function name
+        :type log_format: str
+        :param mode: The mode you want to open the file in
+        :type mode: str
+        """
+        self.log_format = log_format
+        try:
+            index_json = open("/Logs/index.json", "r").read()
+            index_json = eval(index_json)
+            index_json["Log number"] += 1
+            log_number = index_json["Log number"]
+            with open("/Logs/index.json", "wt") as file:
+                file.write(str(index_json))
+        except (OSError, AttributeError):
+            with open("/Logs/index.json", "wt") as file:
+                index_json = {"Log number": 0}
+                log_number = index_json["Log number"]
+                file.write(str(index_json))
+        self.file_object = open("/Logs/" + str(log_number) + ".log", mode)
+
+    def log(self, string, function_name=None):
+        """
+        Send a string to the file
+        :param string:
+        :param function_name:
+        """
+        self.file_object.write(self.log_format.replace("%s", str(string)).replace("%t", str(brain.timer.time(SECONDS))).replace("%m", str(brain.timer.time(MSEC))).replace("%n", str(function_name)))
+
+    def exit(self):
+        """
+        Close the log object
+        """
+        self.file_object.close()
