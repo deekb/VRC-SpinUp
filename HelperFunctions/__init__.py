@@ -136,12 +136,10 @@ class BetterDrivetrain:
             if left_turn_difference < right_turn_difference:
                 delta_heading = left_turn_difference
                 self.left_side.set_velocity(delta_heading * self.turn_aggression + self.motor_stall_speed, PERCENT)
-                self.right_side.set_velocity((
-                                                         delta_heading * self.turn_aggression + self.motor_stall_speed) * -1, PERCENT)
+                self.right_side.set_velocity((delta_heading * self.turn_aggression + self.motor_stall_speed) * -1, PERCENT)
             else:
                 delta_heading = right_turn_difference
-                self.left_side.set_velocity((
-                                                        delta_heading * self.turn_aggression + self.motor_stall_speed) * -1, PERCENT)
+                self.left_side.set_velocity((delta_heading * self.turn_aggression + self.motor_stall_speed) * -1, PERCENT)
                 self.right_side.set_velocity(delta_heading * self.turn_aggression + self.motor_stall_speed, PERCENT)
             current_heading = self.inertial.heading(DEGREES) % 360
             left_turn_difference = current_heading - desired_heading
@@ -175,6 +173,52 @@ class BetterDrivetrain:
         self.right_side.spin(FORWARD)
         while distance_traveled < distance_mm:
             distance_traveled = abs((((self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
+            if distance_mm - distance_traveled < 200:
+                speed = min(initial_speed * (distance_mm - distance_traveled) / 200 + min((self.motor_stall_speed + distance_mm - distance_traveled), self.motor_stall_speed), initial_speed)
+            else:
+                speed = initial_speed
+            current_heading = self.inertial.heading(DEGREES) % 360  # Get the current heading and ensure it is between 0 and 360
+            left_turn_difference = (current_heading - desired_heading)
+            right_turn_difference = (desired_heading - current_heading)
+            if left_turn_difference < 0:  # Ensure that the values are in range -180 to 180
+                left_turn_difference += 360
+            if right_turn_difference < 0:
+                right_turn_difference += 360
+            if left_turn_difference < right_turn_difference:  # correct towards the most efficient direction
+                delta_heading = left_turn_difference
+                self.left_side.set_velocity(speed + (delta_heading * self.correction_aggression), PERCENT)
+                self.right_side.set_velocity(speed - (delta_heading * self.correction_aggression), PERCENT)
+            else:
+                delta_heading = right_turn_difference
+                self.left_side.set_velocity(speed - (delta_heading * self.correction_aggression), PERCENT)
+                self.right_side.set_velocity(speed + (delta_heading * self.correction_aggression), PERCENT)
+        self.left_side.stop()
+        self.right_side.stop()
+        self.current_heading = desired_heading
+        self.current_x += math.cos(desired_heading * math.pi / 180) * distance_mm
+        self.current_y += math.sin(desired_heading * math.pi / 180) * distance_mm
+
+    def move_towards_heading_old(self, desired_heading: float, speed: float, distance_mm: float,
+                                 relative: bool = False) -> None:
+        """
+        Move towards a heading using dynamic course correction
+        :param relative: Whether to turn relative to the last turn or not
+        :param desired_heading: The absolute heading to move towards
+        :param speed:  The base speed to move at
+        :param distance_mm: The distance to move before stopping the movement
+        """
+        if relative:
+            desired_heading += self.current_heading
+        desired_heading %= 360
+        initial_speed = speed
+        initial_distance_traveled = (((self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm
+        distance_traveled = abs((((self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
+        self.left_side.set_velocity(0, PERCENT)
+        self.right_side.set_velocity(0, PERCENT)
+        self.left_side.spin(FORWARD)
+        self.right_side.spin(FORWARD)
+        while distance_traveled < distance_mm:
+            distance_traveled = abs((((elf.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
             if distance_mm - distance_traveled < 200:
                 speed = min(initial_speed * (distance_mm - distance_traveled) / 200 + min((self.motor_stall_speed + distance_mm - distance_traveled), self.motor_stall_speed), initial_speed)
             else:

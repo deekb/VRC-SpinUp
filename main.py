@@ -212,15 +212,16 @@ def setup() -> None:
                 wait(5)
 
 
-def roll_roller(degrees=90) -> None:
+def roll_roller(degrees=70) -> None:
     """
     Spin the roller
     :param degrees: Degrees to spin the roller
     :type degrees: float
     """
     Motors.allWheels.set_stopping(COAST)  # Always good while running into things
+    Motors.roller.set_stopping(BRAKE)
     Motors.allWheels.set_velocity(-15, PERCENT)
-    Motors.roller.set_velocity(15)
+    Motors.roller.set_velocity(30)
     Motors.allWheels.spin(FORWARD)
     while Sensors.ultrasonic.distance(MM) > Globals.ULTRASONIC_BACKUP_COMPLETE_DISTANCE_MM:
         wait(5)
@@ -228,7 +229,7 @@ def roll_roller(degrees=90) -> None:
     Motors.rightFrontMotor.set_velocity(-1, PERCENT)
     Motors.roller.spin_for(REVERSE, degrees, DEGREES)
     Motors.allWheels.stop()
-    Motors.allWheels.set_stopping(BRAKE)
+    Motors.allWheels.set_stopping(Globals.STOPPING_MODE)
 
 
 def on_autonomous() -> None:
@@ -366,6 +367,7 @@ def on_autonomous() -> None:
         # Autonomous to roll both rollers without the optical sensor
         drivetrain.turn_to_heading(desired_heading=0)
         roll_roller()
+        Motors.allWheels.set_stopping(BRAKE)
         drivetrain.move_towards_heading(desired_heading=0, speed=40, distance_mm=100)
         drivetrain.turn_to_heading(desired_heading=35)
         drivetrain.move_towards_heading(desired_heading=35, speed=70, distance_mm=1075)
@@ -388,19 +390,35 @@ def on_autonomous() -> None:
         # Autonomous to roll all four rollers without the optical sensor
         Motors.intake.set_velocity(100, PERCENT)
         Motors.intake.spin(FORWARD)
-        Motors.flywheel.set_velocity(25, PERCENT)
-        Motors.flywheel.spin(FORWARD)
         drivetrain.turn_to_heading(desired_heading=0)
         roll_roller(degrees=180)
-        drivetrain.turn_to_heading(desired_heading=0)
+        Motors.allWheels.set_stopping(BRAKE)
         drivetrain.move_towards_heading(desired_heading=0, speed=40, distance_mm=650)
         drivetrain.turn_to_heading(desired_heading=90)
-        drivetrain.move_towards_heading(desired_heading=90, speed=-40, distance_mm=650)
+        drivetrain.move_towards_heading(desired_heading=90, speed=-40, distance_mm=570)
         roll_roller(degrees=180)
-        drivetrain.turn_to_heading(desired_heading=90)
-        # Fire expansion
+        Motors.allWheels.set_stopping(BRAKE)
+        drivetrain.move_towards_heading(desired_heading=90, speed=40, distance_mm=1200)
         drivetrain.turn_to_heading(desired_heading=45)
+        drivetrain.move_towards_heading(desired_heading=45, speed=40, distance_mm=2875)
+        drivetrain.turn_to_heading(desired_heading=-90)
+        roll_roller(degrees=180)
+        Motors.allWheels.set_stopping(BRAKE)
+        drivetrain.move_towards_heading(desired_heading=-90, speed=40, distance_mm=650)
+        drivetrain.turn_to_heading(desired_heading=-180)
+        drivetrain.move_towards_heading(desired_heading=-180, speed=-40, distance_mm=650)
+        roll_roller(degrees=180)
+        Motors.allWheels.set_stopping(BRAKE)
+        drivetrain.move_towards_heading(desired_heading=-180, speed=40, distance_mm=650)
+        drivetrain.turn_to_heading(desired_heading=-135)
+        drivetrain.move_towards_heading(desired_heading=-135, speed=-40, distance_mm=600)
+        drivetrain.turn_to_heading(desired_heading=-135)
         fire_expansion()
+        wait(1000)
+        drivetrain.turn_to_heading(desired_heading=-142)
+        drivetrain.move_towards_heading(desired_heading=-142, speed=-40, distance_mm=620)
+        drivetrain.turn_to_heading(desired_heading=-90)
+        drivetrain.move_towards_heading(desired_heading=-142, speed=-40, distance_mm=110)
     auton_log("Autonomous:INFO: Cleaning up")
     Motors.intake.set_velocity(0, PERCENT)
     Motors.intake.stop()
