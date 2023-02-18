@@ -105,6 +105,7 @@ class Globals:
                         ("Plow disks", AutonomousTask.PUSH_IN_DISKS_WITH_PLOW),
                         ("Spit disks", AutonomousTask.SPIT_OUT_DISKS_WITH_INTAKE),
                         ("Low goal", AutonomousTask.SCORE_IN_LOW_GOAL),
+                        ("Skills", AutonomousTask.SKILLS),
                         ("Test drivetrain", AutonomousTask.DRIVETRAIN_TEST),
                         ("Nothing", AutonomousTask.DO_NOTHING)]),
         ("Flywheel autostart", [("Yes", True), ("No", False)])
@@ -220,7 +221,7 @@ def roll_roller(degrees=70) -> None:
     """
     Motors.allWheels.set_stopping(COAST)  # Always good while running into things
     Motors.roller.set_stopping(BRAKE)
-    Motors.allWheels.set_velocity(-15, PERCENT)
+    Motors.allWheels.set_velocity(-25, PERCENT)
     Motors.roller.set_velocity(30)
     Motors.allWheels.spin(FORWARD)
     while Sensors.ultrasonic.distance(MM) > Globals.ULTRASONIC_BACKUP_COMPLETE_DISTANCE_MM:
@@ -358,8 +359,6 @@ def on_autonomous() -> None:
         # Autonomous to roll the right roller without the optical sensor
         drivetrain.turn_to_heading(desired_heading=0)
         drivetrain.move_towards_heading(desired_heading=0, speed=-50, distance_mm=450)
-        drivetrain.turn_to_heading(desired_heading=55)
-        drivetrain.move_towards_heading(desired_heading=55, speed=-50, distance_mm=280)
         drivetrain.turn_to_heading(desired_heading=90)
         roll_roller()
     elif Globals.AUTONOMOUS_TASK == AutonomousTask.ROLLER_BOTH:
@@ -368,21 +367,18 @@ def on_autonomous() -> None:
         drivetrain.turn_to_heading(desired_heading=0)
         roll_roller()
         Motors.allWheels.set_stopping(BRAKE)
-        drivetrain.move_towards_heading(desired_heading=0, speed=40, distance_mm=100)
+        drivetrain.move_towards_heading(desired_heading=0, speed=60, distance_mm=100)
         drivetrain.turn_to_heading(desired_heading=35)
-        drivetrain.move_towards_heading(desired_heading=35, speed=70, distance_mm=1075)
+        drivetrain.move_towards_heading(desired_heading=35, speed=90, distance_mm=1275)
         drivetrain.turn_to_heading(desired_heading=45)
-        drivetrain.move_towards_heading(desired_heading=45, speed=70, distance_mm=1700)
+        drivetrain.move_towards_heading(desired_heading=45, speed=90, distance_mm=1600)
         drivetrain.turn_to_heading(desired_heading=90)
+        drivetrain.move_towards_heading(desired_heading=90, speed=-70, distance_mm=140)
         Motors.intake.set_velocity(50, PERCENT)
-        Motors.flywheel.set_velocity(80, PERCENT)
         Motors.intake.spin(FORWARD)
-        Motors.flywheel.spin(FORWARD)
-        drivetrain.move_towards_heading(desired_heading=90, speed=60, distance_mm=140)
         drivetrain.turn_to_heading(desired_heading=-135)
-        drivetrain.move_towards_heading(desired_heading=-135, speed=-60, distance_mm=500)
+        drivetrain.move_towards_heading(desired_heading=-135, speed=-60, distance_mm=800)
         Motors.intake.stop()
-        Motors.flywheel.stop()
         drivetrain.turn_to_heading(desired_heading=-90)
         roll_roller()
     elif Globals.AUTONOMOUS_TASK == AutonomousTask.SKILLS:
@@ -391,23 +387,23 @@ def on_autonomous() -> None:
         Motors.intake.set_velocity(100, PERCENT)
         Motors.intake.spin(FORWARD)
         drivetrain.turn_to_heading(desired_heading=0)
-        roll_roller(degrees=180)
+        roll_roller(degrees=140)
         Motors.allWheels.set_stopping(BRAKE)
         drivetrain.move_towards_heading(desired_heading=0, speed=40, distance_mm=650)
         drivetrain.turn_to_heading(desired_heading=90)
         drivetrain.move_towards_heading(desired_heading=90, speed=-40, distance_mm=570)
-        roll_roller(degrees=180)
+        roll_roller(degrees=140)
         Motors.allWheels.set_stopping(BRAKE)
         drivetrain.move_towards_heading(desired_heading=90, speed=40, distance_mm=1200)
         drivetrain.turn_to_heading(desired_heading=45)
-        drivetrain.move_towards_heading(desired_heading=45, speed=40, distance_mm=2875)
+        drivetrain.move_towards_heading(desired_heading=45, speed=40, distance_mm=2500)
         drivetrain.turn_to_heading(desired_heading=-90)
-        roll_roller(degrees=180)
+        roll_roller(degrees=140)
         Motors.allWheels.set_stopping(BRAKE)
         drivetrain.move_towards_heading(desired_heading=-90, speed=40, distance_mm=650)
         drivetrain.turn_to_heading(desired_heading=-180)
         drivetrain.move_towards_heading(desired_heading=-180, speed=-40, distance_mm=650)
-        roll_roller(degrees=180)
+        roll_roller(degrees=140)
         Motors.allWheels.set_stopping(BRAKE)
         drivetrain.move_towards_heading(desired_heading=-180, speed=40, distance_mm=650)
         drivetrain.turn_to_heading(desired_heading=-135)
@@ -420,14 +416,7 @@ def on_autonomous() -> None:
         drivetrain.turn_to_heading(desired_heading=-90)
         drivetrain.move_towards_heading(desired_heading=-142, speed=-40, distance_mm=110)
     auton_log("Autonomous:INFO: Cleaning up")
-    Motors.intake.set_velocity(0, PERCENT)
-    Motors.intake.stop()
-    Motors.roller.set_velocity(0, PERCENT)
-    Motors.roller.stop()
-    Motors.flywheel.set_velocity(0, PERCENT)
-    Motors.flywheel.stop()
-    Motors.allWheels.set_velocity(0, PERCENT)
-    Motors.allWheels.stop()
+    Motors.allMotors.stop()
     Motors.allWheels.set_stopping(Globals.STOPPING_MODE)
     auton_log("Autonomous:STATUS: Exit")
     autonomous_log.exit()
@@ -477,12 +466,18 @@ def start_stop_roller() -> None:
     if not Globals.SETUP_COMPLETE:
         bprint("[start_stop_roller]: setup not complete, ignoring request")
         return
-    Globals.ROLLER_ACTIVE = not Globals.ROLLER_ACTIVE
-    if Globals.ROLLER_ACTIVE:
-        Motors.roller.set_velocity(75, PERCENT)
-        Motors.roller.spin(REVERSE)
-    else:
-        Motors.roller.stop()
+    Motors.roller.set_velocity(75, PERCENT)
+    Motors.roller.spin(REVERSE)
+    while Controllers.primary.buttonL1.pressing() or Controllers.secondary.buttonL1.pressing():
+        wait(10)
+    Motors.roller.stop()
+
+    # Globals.ROLLER_ACTIVE = not Globals.ROLLER_ACTIVE
+    # if Globals.ROLLER_ACTIVE:
+    #     Motors.roller.set_velocity(75, PERCENT)
+    #     Motors.roller.spin(REVERSE)
+    # else:
+    #     Motors.roller.stop()
 
 
 # </editor-fold>
@@ -640,9 +635,10 @@ def reset_expansion() -> None:
     Motors.expansion.set_velocity(30, PERCENT)
     Motors.expansion.spin(FORWARD)
     Motors.expansion.set_stopping(COAST)  # Don't burn out the motor
-    while Motors.expansion.velocity() > 5:
+    wait(100)
+    while Motors.expansion.velocity() > 10:
         wait(10)
-    Motors.expansion.spin_for(REVERSE, 20, DEGREES)
+    Motors.expansion.spin_for(REVERSE, 10, DEGREES)
     Motors.expansion.set_stopping(HOLD)
 
 
@@ -652,7 +648,7 @@ Controllers.primary.buttonB.pressed(start_loader)
 Controllers.primary.buttonX.pressed(unload)
 Controllers.primary.buttonR2.pressed(unload_no_reload)
 Controllers.primary.buttonL1.pressed(start_stop_roller)
-# Controllers.primary.buttonR1.pressed(reset_loader)
+Controllers.primary.buttonR1.pressed(reset_loader)
 # Controllers.primary.buttonL2.pressed(fire_expansion)
 
 # Secondary controller bindings
@@ -709,7 +705,7 @@ if __name__ == "__main__":
     # Apply the effect of seting Globals.STOPPING_MODE during setup
     Motors.allWheels.set_stopping(Globals.STOPPING_MODE)
     # Initialize a new smart drivetrain from our helper functions module (Not the vex one)
-    drivetrain = BetterDrivetrain(inertial=Sensors.inertial, left_side=Motors.leftDrivetrain, right_side=Motors.rightDrivetrain, wheel_radius_mm=50, turn_aggression=0.25, correction_aggression=0.25, heading_offset_tolerance=1, motor_stall_speed=5, movement_slowdown_threshhold=200)
+    drivetrain = BetterDrivetrain(inertial=Sensors.inertial, left_side=Motors.leftDrivetrain, right_side=Motors.rightDrivetrain, wheel_radius_mm=50, turn_aggression=0.25, correction_aggression=0.1, heading_offset_tolerance=1, motor_stall_speed=5, movement_slowdown_threshhold=500)
     cprint("Calibrating Gyro...")
     Sensors.inertial.calibrate()
     while Sensors.inertial.is_calibrating():

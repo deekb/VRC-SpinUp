@@ -173,8 +173,8 @@ class BetterDrivetrain:
         self.right_side.spin(FORWARD)
         while distance_traveled < distance_mm:
             distance_traveled = abs((((self.left_side.position(DEGREES) + self.right_side.position(DEGREES)) / 2) / 360) * self.wheel_circumference_mm - initial_distance_traveled)
-            if distance_mm - distance_traveled < 200:
-                speed = min(initial_speed * (distance_mm - distance_traveled) / 200 + min((self.motor_stall_speed + distance_mm - distance_traveled), self.motor_stall_speed), initial_speed)
+            if distance_mm - distance_traveled < self.movement_slowdown_threshhold:
+                speed = min(initial_speed * (distance_mm - distance_traveled) / self.movement_slowdown_threshhold + min((self.motor_stall_speed + distance_mm - distance_traveled), self.motor_stall_speed), initial_speed)
             else:
                 speed = initial_speed
             current_heading = self.inertial.heading(DEGREES) % 360  # Get the current heading and ensure it is between 0 and 360
